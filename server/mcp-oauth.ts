@@ -7,6 +7,7 @@ import type { McpServerSpec } from "./contracts.ts";
 import { discoverMcpAuth, type McpAuthMetadata } from "./mcp-oauth-discovery.ts";
 import { McpOAuthStore, type McpOAuthRecord, type McpOAuthTokens } from "./mcp-oauth-store.ts";
 import type { McpOAuthClientConfig } from "./mcp-registry.ts";
+import { ownerOAuthSecret } from "./oauth-owner-secret.ts";
 
 export type McpSignInPhase = "waiting" | "succeeded" | "failed" | "cancelled" | "expired";
 
@@ -185,6 +186,7 @@ class RegistrationRefused extends Error {}
 
 export class McpOAuthManager {
   private readonly store: McpOAuthStore;
+  private readonly oauthFile: string;
   private readonly lifetimeMs: number;
   private readonly isOwnerLive: (owner: string) => boolean;
   private readonly flows = new Map<string, Flow>();
@@ -194,19 +196,27 @@ export class McpOAuthManager {
 
   /** `clients` is read when needed: an app's secret is never copied into this store. */
   constructor(options: { file: string; lifetimeMs?: number; clients?: (name: string, url: string) => McpOAuthClientConfig | undefined; isOwnerLive?: (owner: string) => boolean }) {
+    this.oauthFile = options.file;
     this.store = new McpOAuthStore(options.file);
     this.isOwnerLive = options.isOwnerLive ?? (() => true);
     this.lifetimeMs = options.lifetimeMs ?? DEFAULT_LIFETIME_MS;
     this.clients = options.clients ?? (() => undefined);
   }
 
+  /** A secret kept beside this installation, never one saved on the MCP server entry. Sent only as client_secret_post. */
+  private ownerSecret(name: string, clientId: string | undefined): string | undefined {
+    return ownerOAuthSecret(this.oauthFile, name, clientId);
+  }
+
   private recordClient(name: string, record: McpOAuthRecord): ClientAuth | null {
     if (!record.clientId) return null;
     if (!record.tokenAuth) return { id: record.clientId, method: "none" };
     const configured = this.clients(name, record.url);
-    return configured?.clientId === record.clientId && configured.clientSecret
-      ? { id: record.clientId, secret: configured.clientSecret, method: record.tokenAuth }
-      : null;
+    if (!configured || configured.clientId !== record.clientId) return null;
+    if (configured.clientSecret) return { id: record.clientId, secret: configured.clientSecret, method: record.tokenAuth };
+    if (record.tokenAuth !== "client_secret_post") return null;
+    const secret = this.ownerSecret(name, record.clientId);
+    return secret ? { id: record.clientId, secret, method: "client_secret_post" } : null;
   }
 
   authState(name: string, url: string): McpAuthState {
@@ -453,8 +463,10 @@ export class McpOAuthManager {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("The sign-in listener could not start.");
       const redirectUri = `http://127.0.0.1:${address.port}${CALLBACK_PATH}`;
+      const ownerSecret = registered && !registered.clientSecret ? this.ownerSecret(name, registered.clientId) : undefined;
+      const secret = registered?.clientSecret ?? ownerSecret;
       const client: ClientAuth = registered
-        ? { id: registered.clientId, ...(registered.clientSecret ? { secret: registered.clientSecret } : {}), method: tokenAuthMethod(meta, registered.clientSecret) }
+        ? { id: registered.clientId, ...(secret ? { secret } : {}), method: ownerSecret ? "client_secret_post" : tokenAuthMethod(meta, secret) }
         : { id: await this.register(meta, redirectUri), method: "none" };
       const scopes = registered?.scopes?.length ? registered.scopes : meta.scopes;
       const flow = this.open(name, url, starting, meta, redirectUri, client, server, scopes);

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -358,6 +358,61 @@ describe("a sign-in app registered in advance", () => {
     const stored = readFileSync(join(dir, "mcp-oauth.json"), "utf8");
     expect(stored).not.toContain(secret);
     expect(JSON.parse(stored).servers.docs).toMatchObject({ clientId: "corp", tokenAuth: "client_secret_post" });
+  });
+
+  it("stays a public client when Google advertises only secret methods and no owner secret is set", async () => {
+    delete process.env.OPENMAUSBOT_OAUTH_SECRET_DOCS;
+    await setup({ noRegistration: true, preRegistered: { "entra-app": null }, tokenAuthMethods: ["client_secret_post", "client_secret_basic"] });
+    registered = { clientId: "entra-app" };
+    expect((await signIn()).phase).toBe("succeeded");
+    expect(oauth.clientAuths).toEqual([{ method: "none", clientId: "entra-app" }]);
+  });
+
+  it("sends an owner secret only in the token body, from the environment or the private file", async () => {
+    const secret = "owner-secret-fixture";
+    await setup({
+      noRegistration: true, expiresIn: 60, preRegistered: { corp: secret },
+      tokenAuthMethods: ["client_secret_post", "client_secret_basic"],
+    });
+    registered = { clientId: "corp" };
+    process.env.OPENMAUSBOT_OAUTH_SECRET_DOCS = secret;
+    try {
+      const started = await manager.start("docs", mcp.url);
+      expect(started.authorizationUrl).not.toContain(secret);
+      expect(new URL(started.authorizationUrl!).searchParams.has("client_secret")).toBe(false);
+      await approve(started);
+      const status = await settled("docs", started.flowId);
+      expect(status.phase).toBe("succeeded");
+      expect(status.message ?? "").not.toContain(secret);
+      expect(oauth.isValid(`Bearer ${await manager.accessToken("docs", mcp.url)}`)).toBe(true);
+      const stored = readFileSync(join(dir, "mcp-oauth.json"), "utf8");
+      expect(stored).not.toContain(secret);
+      expect(stored).not.toContain("clientSecret");
+      expect(JSON.parse(stored).servers.docs).toMatchObject({ clientId: "corp", tokenAuth: "client_secret_post" });
+      await manager.signOut("docs", mcp.url);
+      expect(oauth.clientAuths).toEqual([
+        { method: "post", clientId: "corp" },
+        { method: "post", clientId: "corp" },
+        { method: "post", clientId: "corp" },
+      ]);
+    } finally {
+      delete process.env.OPENMAUSBOT_OAUTH_SECRET_DOCS;
+    }
+
+    manager.dispose();
+    await mcp.close();
+    await oauth.close();
+    await setup({
+      noRegistration: true, preRegistered: { corp: secret },
+      tokenAuthMethods: ["client_secret_post", "client_secret_basic"],
+    });
+    registered = { clientId: "corp" };
+    writeFileSync(join(dir, "mcp-oauth-secrets.json"), JSON.stringify({ byName: { docs: secret } }));
+    const started = await manager.start("docs", mcp.url);
+    await approve(started);
+    expect((await settled("docs", started.flowId)).phase).toBe("succeeded");
+    expect(oauth.clientAuths).toEqual([{ method: "post", clientId: "corp" }]);
+    expect(readFileSync(join(dir, "mcp-oauth.json"), "utf8")).not.toContain(secret);
   });
 
   it("reports a refused secret as a failed sign-in", async () => {

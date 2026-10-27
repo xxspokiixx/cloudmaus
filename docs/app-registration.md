@@ -71,17 +71,17 @@ Redirect URI: `http://127.0.0.1:33871/mcp-oauth/callback`. Delegated scope: `fdc
 
 The app registration that produced this client id uses a public client (mobile and desktop) with that redirect URI, **Allow public client flows**, and the delegated Work IQ scope. Microsoft’s token endpoint currently advertises `client_secret_post`, `private_key_jwt`, `client_secret_basic`, and `self_signed_tls_client_auth`. OpenMausBot sends PKCE S256 with token endpoint auth method `none`. If Microsoft rejects that exchange, sign-in stops. Do not add a secret to the catalog.
 
-## Google Workspace — register one Web application for six cards
+## Google Workspace is registered
 
-Checked against [Configure the Google Workspace MCP servers](https://developers.google.com/workspace/guides/configure-mcp-servers) (last updated 2026-10-27 UTC). The page is labeled Developer Preview.
+Gmail, Google Calendar, Google Docs, Google Drive, Google Sheets, and Google Slides each have their own MCP URL. They share one public client id: `990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com`. That id is set on `gmail`, `google-calendar`, `google-docs`, `google-drive`, `google-sheets`, and `google-slides`. No client secret is in the catalog, the repo, or `config.json`. Those six cards show **Connect**.
 
-Gmail, Google Calendar, Google Docs, Google Drive, Google Sheets, and Google Slides each have their own MCP URL, so each has its own loopback redirect URI. One OAuth client can hold all six. Google’s page also lists Chat, People, and Classroom. Those three are not Connect cards in this catalog.
+Checked against [Configure the Google Workspace MCP servers](https://developers.google.com/workspace/guides/configure-mcp-servers) (last updated 2026-10-27 UTC). The page is labeled Developer Preview. Google’s page also lists Chat, People, and Classroom. Those three are not Connect cards in this catalog.
 
 ### What Google’s page specifies
 
 Google’s guide says to create the client as a **Web application**, turn on **Use this client for an AI-powered agent**, and copy both the client id and the client secret. The redirect URIs on that page are `https://antigravity.google/oauth-callback` and `https://claude.ai/api/mcp/auth_callback`.
 
-A Desktop client is not described on that page, so a Desktop client cannot be verified as accepted by these MCP servers. PKCE with token endpoint auth method `none` is also absent: the Antigravity and Claude examples send a client secret, and the live authorization-server metadata for these hosts lists `client_secret_post` and `client_secret_basic`. Whether a Web application client with PKCE and no secret is accepted cannot be verified from Google’s docs. OpenMausBot still sends PKCE S256 and method `none`, and this catalog does not store a secret. If Google rejects that exchange, sign-in stops.
+A Desktop client is not described on that page, so a Desktop client cannot be verified as accepted by these MCP servers. PKCE with token endpoint auth method `none` is also absent: the Antigravity and Claude examples send a client secret, and the live authorization-server metadata for these hosts lists `client_secret_post` and `client_secret_basic`. Whether a Web application client with PKCE and no secret is accepted cannot be verified from Google’s docs. With no owner secret set, OpenMausBot still sends PKCE S256 and method `none`. If Google rejects that exchange, sign-in stops until the optional secret below is set on this computer.
 
 Google’s page says a refresh token is issued only when the authorization request includes `access_type=offline`. This app’s sign-in request sends `code_challenge` and `code_challenge_method=S256` and does not send `access_type`. Google says that without a refresh token the person signs in again about every hour.
 
@@ -110,8 +110,26 @@ The consent-screen scopes on Google’s page are shorter than the scopes in each
    - Google Slides (`google-slides`, `https://slidesmcp.googleapis.com/mcp/v1`): `http://127.0.0.1:35428/mcp-oauth/callback`
 
 5. Select **Use this client for an AI-powered agent**. Create the client. Google’s console shows a client secret next to the client id.
-6. Copy only the client id into `shared/plugin-catalog.json` on `gmail`, `google-calendar`, `google-docs`, `google-drive`, `google-sheets`, and `google-slides`, each as `mcp.clientId`. Leave the client secret in Google’s console. There is no `clientSecret` field in the catalog.
-7. Ship the catalog. Each of those six cards then shows Connect.
+6. The client id above is already on each of the six `mcp.clientId` fields. Leave the client secret out of the catalog. There is no `clientSecret` field.
+
+### Optional client secret, only if Google rejects the public client
+
+Connect works with PKCE and no secret until Google’s token endpoint refuses that exchange. The secret is optional and stays on the owner’s computer.
+
+Set one of these. A catalog-id variable wins over the shared Google variable. An environment variable wins over the file.
+
+- `OPENMAUSBOT_OAUTH_SECRET_GOOGLE` — one secret for every card whose client id ends in `.apps.googleusercontent.com`
+- `OPENMAUSBOT_OAUTH_SECRET_GMAIL`, `OPENMAUSBOT_OAUTH_SECRET_GOOGLE_CALENDAR`, `OPENMAUSBOT_OAUTH_SECRET_GOOGLE_DOCS`, `OPENMAUSBOT_OAUTH_SECRET_GOOGLE_DRIVE`, `OPENMAUSBOT_OAUTH_SECRET_GOOGLE_SHEETS`, `OPENMAUSBOT_OAUTH_SECRET_GOOGLE_SLIDES` — one card, named from the catalog id
+
+Or write `~/.openmausbot/mcp-oauth-secrets.json` (the file next to `mcp-oauth.json`, mode `0600`):
+
+```json
+{ "byName": { "google": "the client secret from Google’s console" } }
+```
+
+`byName` keys are the MCP server name (`gmail`, `google-calendar`, and the other catalog ids) or `google` for all six. The value is one line of printable text.
+
+OpenMausBot reads that value only while exchanging or refreshing a token. When it is present, the token request body includes `client_secret` (`client_secret_post`). The authorize URL does not. The value is not written to `config.json`, the catalog, `mcp-oauth.json`, or a log line. With the variable and the file both absent, sign-in stays a public client with PKCE.
 
 ### Scopes Connect will request
 
@@ -126,7 +144,7 @@ These are the scopes from each server’s protected-resource metadata, probed 20
 
 ## Still waiting on a public client id
 
-These servers have a documented MCP URL and OAuth metadata, and the metadata has no `registration_endpoint`. `mcp.clientId` is still empty on GitHub, the six Google cards, HubSpot, Slack, X, and Zoom. No client id from a vendor sample, Cursor plugin, or HTTP header is copied in.
+These servers have a documented MCP URL and OAuth metadata, and the metadata has no `registration_endpoint`. `mcp.clientId` is still empty on GitHub, HubSpot, Slack, X, and Zoom. No client id from a vendor sample, Cursor plugin, or HTTP header is copied in. The six Google cards follow **Google Workspace is registered** above.
 
 **Where the client id goes.** On that plugin’s `mcp` object in `shared/plugin-catalog.json`:
 
@@ -134,7 +152,7 @@ These servers have a documented MCP URL and OAuth metadata, and the metadata has
 "clientId": "the public client id"
 ```
 
-There is no `clientSecret` field. Leave `clientId` out until you have one. The card then says Needs app registration and links to the vendor page for that product. The per-product steps below repeat the redirect URI and metadata scopes. The six Google cards follow **Google Workspace — register one Web application for six cards** above.
+There is no `clientSecret` field. Leave `clientId` out until you have one. The card then says Needs app registration and links to the vendor page for that product. The per-product steps below repeat the redirect URI and metadata scopes. The six Google cards follow **Google Workspace is registered** above.
 
 ### GitHub
 
@@ -160,15 +178,9 @@ MCP URL: `https://gmailmcp.googleapis.com/mcp/v1`
 
 Registration docs: https://developers.google.com/workspace/guides/configure-mcp-servers
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:30920/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `https://mail.google.com/`, `https://www.googleapis.com/auth/gmail.compose`, `https://www.googleapis.com/auth/gmail.drafts`, `https://www.googleapis.com/auth/gmail.drafts.create`, `https://www.googleapis.com/auth/gmail.drafts.readonly`, `https://www.googleapis.com/auth/gmail.labels`, `https://www.googleapis.com/auth/gmail.metadata`, `https://www.googleapis.com/auth/gmail.modify`, `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/gmail.send`, `https://www.googleapis.com/auth/gmail.settings.basic`
-4. Put only the client id in `shared/plugin-catalog.json` under `gmail` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
+Redirect URI: `http://127.0.0.1:30920/mcp-oauth/callback`. Scopes from the server’s protected-resource metadata: `https://mail.google.com/`, `https://www.googleapis.com/auth/gmail.compose`, `https://www.googleapis.com/auth/gmail.drafts`, `https://www.googleapis.com/auth/gmail.drafts.create`, `https://www.googleapis.com/auth/gmail.drafts.readonly`, `https://www.googleapis.com/auth/gmail.labels`, `https://www.googleapis.com/auth/gmail.metadata`, `https://www.googleapis.com/auth/gmail.modify`, `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/gmail.send`, `https://www.googleapis.com/auth/gmail.settings.basic`.
 
-The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
+Registered. Public client id `990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com` is on `mcp.clientId`. No client secret is in the catalog. This card shows Connect. See **Google Workspace is registered**, including the optional `client_secret_post` secret that stays out of the repo.
 
 ### Google Calendar
 
@@ -178,15 +190,9 @@ MCP URL: `https://calendarmcp.googleapis.com/mcp/v1`
 
 Registration docs: https://developers.google.com/workspace/guides/configure-mcp-servers
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:31572/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/calendar`, `https://www.googleapis.com/auth/calendar.acls`, `https://www.googleapis.com/auth/calendar.calendarlist`, `https://www.googleapis.com/auth/calendar.calendarlist.readonly`, `https://www.googleapis.com/auth/calendar.calendars`, `https://www.googleapis.com/auth/calendar.calendars.readonly`, `https://www.googleapis.com/auth/calendar.events`, `https://www.googleapis.com/auth/calendar.events.freebusy`, `https://www.googleapis.com/auth/calendar.events.readonly`, `https://www.googleapis.com/auth/calendar.freebusy`, `https://www.googleapis.com/auth/calendar.readonly`, `https://www.googleapis.com/auth/calendar.settings.readonly`
-4. Put only the client id in `shared/plugin-catalog.json` under `google-calendar` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
+Redirect URI: `http://127.0.0.1:31572/mcp-oauth/callback`. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/calendar`, `https://www.googleapis.com/auth/calendar.acls`, `https://www.googleapis.com/auth/calendar.calendarlist`, `https://www.googleapis.com/auth/calendar.calendarlist.readonly`, `https://www.googleapis.com/auth/calendar.calendars`, `https://www.googleapis.com/auth/calendar.calendars.readonly`, `https://www.googleapis.com/auth/calendar.events`, `https://www.googleapis.com/auth/calendar.events.freebusy`, `https://www.googleapis.com/auth/calendar.events.readonly`, `https://www.googleapis.com/auth/calendar.freebusy`, `https://www.googleapis.com/auth/calendar.readonly`, `https://www.googleapis.com/auth/calendar.settings.readonly`.
 
-The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
+Registered. Public client id `990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com` is on `mcp.clientId`. No client secret is in the catalog. This card shows Connect. See **Google Workspace is registered**, including the optional `client_secret_post` secret that stays out of the repo.
 
 ### Google Docs
 
@@ -196,15 +202,9 @@ MCP URL: `https://docsmcp.googleapis.com/mcp/v1`
 
 Registration docs: https://developers.google.com/workspace/guides/configure-mcp-servers
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:25227/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/documents.readonly`, `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/documents`
-4. Put only the client id in `shared/plugin-catalog.json` under `google-docs` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
+Redirect URI: `http://127.0.0.1:25227/mcp-oauth/callback`. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/documents.readonly`, `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/documents`.
 
-The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
+Registered. Public client id `990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com` is on `mcp.clientId`. No client secret is in the catalog. This card shows Connect. See **Google Workspace is registered**, including the optional `client_secret_post` secret that stays out of the repo.
 
 ### Google Drive
 
@@ -214,15 +214,9 @@ MCP URL: `https://drivemcp.googleapis.com/mcp/v1`
 
 Registration docs: https://developers.google.com/workspace/guides/configure-mcp-servers
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:26106/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/drive.file`
-4. Put only the client id in `shared/plugin-catalog.json` under `google-drive` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
+Redirect URI: `http://127.0.0.1:26106/mcp-oauth/callback`. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/drive.file`.
 
-The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
+Registered. Public client id `990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com` is on `mcp.clientId`. No client secret is in the catalog. This card shows Connect. See **Google Workspace is registered**, including the optional `client_secret_post` secret that stays out of the repo.
 
 ### Google Sheets
 
@@ -232,15 +226,9 @@ MCP URL: `https://sheetsmcp.googleapis.com/mcp/v1`
 
 Registration docs: https://developers.google.com/workspace/guides/configure-mcp-servers
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:27862/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/spreadsheets.readonly`, `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/spreadsheets`
-4. Put only the client id in `shared/plugin-catalog.json` under `google-sheets` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
+Redirect URI: `http://127.0.0.1:27862/mcp-oauth/callback`. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/spreadsheets.readonly`, `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/spreadsheets`.
 
-The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
+Registered. Public client id `990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com` is on `mcp.clientId`. No client secret is in the catalog. This card shows Connect. See **Google Workspace is registered**, including the optional `client_secret_post` secret that stays out of the repo.
 
 ### Google Slides
 
@@ -250,15 +238,9 @@ MCP URL: `https://slidesmcp.googleapis.com/mcp/v1`
 
 Registration docs: https://developers.google.com/workspace/guides/configure-mcp-servers
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:35428/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/presentations.readonly`, `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.file`, `https://www.googleapis.com/auth/presentations`
-4. Put only the client id in `shared/plugin-catalog.json` under `google-slides` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
+Redirect URI: `http://127.0.0.1:35428/mcp-oauth/callback`. Scopes from the server’s protected-resource metadata: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/presentations.readonly`, `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.file`, `https://www.googleapis.com/auth/presentations`.
 
-The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
+Registered. Public client id `990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com` is on `mcp.clientId`. No client secret is in the catalog. This card shows Connect. See **Google Workspace is registered**, including the optional `client_secret_post` secret that stays out of the repo.
 
 ### HubSpot
 

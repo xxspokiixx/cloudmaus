@@ -937,6 +937,7 @@
         "https://www.googleapis.com/auth/gmail.send",
         "https://www.googleapis.com/auth/gmail.settings.basic"
       ],
+      "clientId": "990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com",
       "verified": true,
       "registrationDocsUrl": "https://developers.google.com/workspace/guides/configure-mcp-servers",
       "probedAt": "2026-10-27"
@@ -1013,6 +1014,7 @@
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/calendar.settings.readonly"
       ],
+      "clientId": "990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com",
       "verified": true,
       "registrationDocsUrl": "https://developers.google.com/workspace/guides/configure-mcp-servers",
       "probedAt": "2026-10-27"
@@ -1060,6 +1062,7 @@
         "https://www.googleapis.com/auth/drive",
         "https://www.googleapis.com/auth/documents"
       ],
+      "clientId": "990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com",
       "verified": true,
       "registrationDocsUrl": "https://developers.google.com/workspace/guides/configure-mcp-servers",
       "probedAt": "2026-10-27"
@@ -1087,6 +1090,7 @@
         "https://www.googleapis.com/auth/drive.readonly",
         "https://www.googleapis.com/auth/drive.file"
       ],
+      "clientId": "990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com",
       "verified": true,
       "registrationDocsUrl": "https://developers.google.com/workspace/guides/configure-mcp-servers",
       "probedAt": "2026-10-27"
@@ -1115,6 +1119,7 @@
         "https://www.googleapis.com/auth/drive",
         "https://www.googleapis.com/auth/spreadsheets"
       ],
+      "clientId": "990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com",
       "verified": true,
       "registrationDocsUrl": "https://developers.google.com/workspace/guides/configure-mcp-servers",
       "probedAt": "2026-10-27"
@@ -1144,6 +1149,7 @@
         "https://www.googleapis.com/auth/drive.file",
         "https://www.googleapis.com/auth/presentations"
       ],
+      "clientId": "990275019107-584m2ummrr63q5audsv7iqbqv7krnofp.apps.googleusercontent.com",
       "verified": true,
       "registrationDocsUrl": "https://developers.google.com/workspace/guides/configure-mcp-servers",
       "probedAt": "2026-10-27"
