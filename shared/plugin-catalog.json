@@ -2542,6 +2542,23 @@
     }
   },
   {
+    "id": "skillmd",
+    "name": "SkillMD",
+    "description": "Search, inspect, and download safety-reviewed Agent Skills from skillmd.com.",
+    "category": "developer-tools",
+    "kind": "connector",
+    "docsUrl": "https://skillmd.com/docs/mcp",
+    "mcp": {
+      "url": "https://api.skillmd.com/mcp",
+      "transport": "http",
+      "auth": "none",
+      "dcr": false,
+      "scopes": [],
+      "verified": true,
+      "probedAt": "2026-10-27"
+    }
+  },
+  {
     "id": "slack",
     "name": "Slack",
     "description": "Search and send Slack messages through Slack’s hosted MCP server.",

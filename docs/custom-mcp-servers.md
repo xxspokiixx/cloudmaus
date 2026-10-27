@@ -54,8 +54,10 @@ and not run. A skill the scanner flags stays off until someone reads it and
 turns it on for that bot.
 
 **Add manually**, under the catalog, previews a GitHub plugin, a folder on
-this computer, an `mcpServers` block, or a skills folder before importing.
-Imported MCP servers stay off until you test and enable them in MCP servers.
+this computer, an `mcpServers` block, a skills folder, or a [SkillMD](skillmd.md)
+skill (`owner/name`) before importing. SkillMD installs one `SKILL.md` and
+leaves it off until you read it. The SkillMD card adds `https://api.skillmd.com/mcp`
+with no token. Imported MCP servers stay off until you test and enable them in MCP servers.
 Placeholder header values (`${TOKEN}`, `YOUR_API_KEY`) are dropped and never
 saved. A folder is read only by the desktop app on this computer.
 

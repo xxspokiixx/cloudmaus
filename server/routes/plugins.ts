@@ -3,6 +3,8 @@ import { MAX_MCP_SERVERS } from "../mcp-registry.ts";
 import {
   importManualPlugin, installCatalogSkills, installedPluginIds, parseManualPluginRequest, previewManualPlugin, removeCatalogSkills,
 } from "../plugin-pack.ts";
+import { installSkillMd, listSkillMd } from "../skillmd.ts";
+import { skillMdVerifiedOnly } from "../../shared/skillmd.ts";
 import type { RequestAuth } from "../request-auth.ts";
 import type { BusyFlag } from "./config.ts";
 import { PASS, type RouteHandler } from "./table.ts";
@@ -24,7 +26,21 @@ function folderAllowed(auth: RequestAuth): boolean {
 /** Catalog skills and the Add manually preview. MCP servers saved here stay off until tested. */
 export function createPluginRoutes(deps: PluginRouteDeps): RouteHandler {
   const fetcher = deps.fetch ?? fetch;
-  return async ({ res, path, method, auth, json, readBody, req }) => {
+  return async ({ res, path, method, auth, json, readBody, req, url }) => {
+    if (method === "GET" && path === "/api/plugins/skillmd") {
+      const result = await listSkillMd(url.searchParams.get("q") ?? "", skillMdVerifiedOnly(url.searchParams.get("verified")), fetcher);
+      return "error" in result ? json(res, 502, result) : json(res, 200, result);
+    }
+    if (method === "POST" && path === "/api/plugins/skillmd/install") {
+      if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
+        return json(res, 415, { error: "content-type must be application/json" });
+      }
+      const body = await readBody(req, 4_096);
+      const slug = body && typeof body === "object" && typeof (body as { slug?: unknown }).slug === "string" ? (body as { slug: string }).slug : "";
+      const result = await installSkillMd(slug, fetcher);
+      return "error" in result ? json(res, 400, result) : json(res, 200, result);
+    }
+
     if (method === "GET" && path === "/api/plugins/skills") {
       return json(res, 200, { ids: installedPluginIds() });
     }

@@ -4,7 +4,7 @@ export const PLUGIN_CATEGORIES = ["productivity", "integrations", "developer-too
 export type PluginCategory = (typeof PLUGIN_CATEGORIES)[number];
 export type PluginKind = "connector" | "skills" | "both";
 export type PluginTransport = "http" | "sse";
-export type PluginAuth = "oauth" | "token";
+export type PluginAuth = "oauth" | "token" | "none";
 
 /** The MCP registry accepts at most this many OAuth scopes on a saved server. A longer list is left off so discovery keeps the server's own list. */
 export const MCP_OAUTH_SCOPE_LIMIT = 32;
@@ -46,6 +46,7 @@ export type PluginAction =
   | { kind: "connect" }
   | { kind: "register"; docsUrl: string }
   | { kind: "token" }
+  | { kind: "add" }
   | { kind: "manual"; docsUrl: string }
   | { kind: "install" };
 
@@ -91,7 +92,7 @@ function parseMcp(value: unknown, id: string): PluginMcp | { error: string } | u
   const url = httpsUrl(mcp.url);
   if (!url) return { error: `${id}: mcp.url must be an https URL` };
   if (mcp.transport !== "http" && mcp.transport !== "sse") return { error: `${id}: mcp.transport must be http or sse` };
-  if (mcp.auth !== "oauth" && mcp.auth !== "token") return { error: `${id}: mcp.auth must be oauth or token` };
+  if (mcp.auth !== "oauth" && mcp.auth !== "token" && mcp.auth !== "none") return { error: `${id}: mcp.auth must be oauth, token, or none` };
   if (typeof mcp.dcr !== "boolean") return { error: `${id}: mcp.dcr must be boolean` };
   if (typeof mcp.verified !== "boolean") return { error: `${id}: mcp.verified must be boolean` };
   if (!Array.isArray(mcp.scopes) || mcp.scopes.some((scope) => typeof scope !== "string" || !SCOPE.test(scope))) {
@@ -112,6 +113,8 @@ function parseMcp(value: unknown, id: string): PluginMcp | { error: string } | u
     if (!docs) return { error: `${id}: registration docs must be an https URL` };
     registrationDocsUrl = docs;
   }
+  if (mcp.auth === "none" && mcp.dcr) return { error: `${id}: a no-auth server does not use dynamic registration` };
+  if (mcp.auth === "none" && clientId) return { error: `${id}: a no-auth server does not take a client id` };
   return {
     url,
     transport: mcp.transport,
@@ -185,6 +188,7 @@ export function pluginActions(entry: PluginEntry): PluginAction[] {
     if (mcp.verified && mcp.auth === "oauth" && (mcp.dcr || clientId)) actions.push({ kind: "connect" });
     else if (mcp.verified && mcp.auth === "oauth") actions.push({ kind: "register", docsUrl: mcp.registrationDocsUrl || entry.docsUrl });
     else if (mcp.verified && mcp.auth === "token") actions.push({ kind: "token" });
+    else if (mcp.verified && mcp.auth === "none" && !mcp.dcr && !clientId) actions.push({ kind: "add" });
     else actions.push({ kind: "manual", docsUrl: entry.docsUrl });
   }
   if ((entry.kind === "skills" || entry.kind === "both") && entry.skills) actions.push({ kind: "install" });

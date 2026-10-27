@@ -12,6 +12,7 @@ import {
 } from "./imported-skills.ts";
 import { parseMcpServersImport } from "./mcp-registry.ts";
 import { parseSkillSource } from "./skill-fetch.ts";
+import { loadSkillMdInstall } from "./skillmd.ts";
 
 const CATALOG_PATH = fileURLToPath(new URL("../shared/plugin-catalog.json", import.meta.url));
 const MAX_PLUGIN_SKILLS = 80;
@@ -42,6 +43,10 @@ export interface PluginPreviewSkill {
   name: string;
   description: string;
   warnings: string[];
+  /** True when a SkillMD skill was not confirmed reviewed. */
+  unreviewed?: boolean;
+  /** Markdown preview. Skill text is shown as text, never followed. */
+  preview?: string;
 }
 
 export interface PluginPreview {
@@ -54,6 +59,8 @@ export interface PreparedSkill {
   name: string;
   description: string;
   warnings: string[];
+  unreviewed?: boolean;
+  preview?: string;
   input: ImportedSkillInput;
 }
 
@@ -410,14 +417,14 @@ async function readGitHubPlugin(
 }
 
 export interface ManualPluginRequest {
-  kind: "github" | "folder" | "mcp" | "skills";
+  kind: "github" | "folder" | "mcp" | "skills" | "skillmd";
   source: string;
 }
 
 export function parseManualPluginRequest(value: unknown): ManualPluginRequest | { error: string } {
   if (!isRecord(value)) return { error: "Expected a plugin source." };
-  if (value.kind !== "github" && value.kind !== "folder" && value.kind !== "mcp" && value.kind !== "skills") {
-    return { error: "Choose a GitHub plugin, a folder, an mcpServers block, or a skills folder." };
+  if (value.kind !== "github" && value.kind !== "folder" && value.kind !== "mcp" && value.kind !== "skills" && value.kind !== "skillmd") {
+    return { error: "Choose a GitHub plugin, a folder, an mcpServers block, a skills folder, or a SkillMD skill." };
   }
   if (typeof value.source !== "string" || !value.source.trim() || value.source.length > 100_000) {
     return { error: "Paste the plugin source first." };
@@ -426,6 +433,15 @@ export function parseManualPluginRequest(value: unknown): ManualPluginRequest | 
 }
 
 async function collect(request: ManualPluginRequest, fetcher: typeof fetch): Promise<{ mcpText: string | null; skills: PreparedSkill[]; skipped: string[] }> {
+  if (request.kind === "skillmd") {
+    const loaded = await loadSkillMdInstall(request.source, fetcher);
+    if ("error" in loaded) return { mcpText: null, skills: [], skipped: [loaded.error] };
+    return {
+      mcpText: null,
+      skills: [{ name: loaded.name, description: loaded.description, warnings: loaded.warnings, unreviewed: loaded.unreviewed, preview: loaded.preview, input: loaded.input }],
+      skipped: [],
+    };
+  }
   if (request.kind === "mcp") return { mcpText: request.source, skills: [], skipped: [] };
   if (request.kind === "folder" || (request.kind === "skills" && isAbsolute(request.source))) {
     const read = readLocalPlugin(request.source, "manual", "Imported plugin");
@@ -461,7 +477,9 @@ function toPreview(collected: { mcpText: string | null; skills: PreparedSkill[];
   const mcp = collected.mcpText ? previewMcpText(collected.mcpText) : { servers: [], skipped: [], importText: null as string | null };
   return {
     servers: mcp.servers,
-    skills: collected.skills.map(({ name, description, warnings }) => ({ name, description, warnings })),
+    skills: collected.skills.map(({ name, description, warnings, unreviewed, preview }) => ({
+      name, description, warnings, ...(unreviewed ? { unreviewed } : {}), ...(preview ? { preview } : {}),
+    })),
     skipped: [...collected.skipped, ...mcp.skipped],
     importText: collected.mcpText ? mcp.importText : null,
     prepared: collected.skills,

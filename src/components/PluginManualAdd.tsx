@@ -4,22 +4,23 @@ import { t } from "@/lib/i18n";
 import type { LocaleKey } from "@/locales";
 import { api } from "@/state/store";
 
-type ManualKind = "github" | "folder" | "mcp" | "skills";
+type ManualKind = "github" | "folder" | "mcp" | "skills" | "skillmd";
 
 const KIND_LABEL: Record<ManualKind, LocaleKey> = {
   github: "plugins.manual.github",
   folder: "plugins.manual.folder",
   mcp: "plugins.manual.mcp",
   skills: "plugins.manual.skills",
+  skillmd: "plugins.manual.skillmd",
 };
 
 interface Preview {
   servers: Array<{ name: string; target: string; transport: string; headerNames: string[] }>;
-  skills: Array<{ name: string; description: string; warnings: string[] }>;
+  skills: Array<{ name: string; description: string; warnings: string[]; unreviewed?: boolean; preview?: string }>;
   skipped: string[];
 }
 
-const KINDS: ManualKind[] = ["github", "folder", "mcp", "skills"];
+const KINDS: ManualKind[] = ["github", "folder", "mcp", "skills", "skillmd"];
 
 /** Preview a plugin, then import it. MCP servers stay disabled. Header values are not shown again. */
 export function PluginManualAdd() {
@@ -59,6 +60,7 @@ export function PluginManualAdd() {
     <section id="plugin-manual" className="mt-6 rounded-xl border border-hairline/40 px-4 py-3" aria-labelledby="plugin-manual-title">
       <p id="plugin-manual-title" className="text-[14px] font-semibold text-ink">{t("plugins.manual.title")}</p>
       <p className="mt-1 text-[12px] leading-relaxed text-ink-secondary">{t("plugins.manual.intro")}</p>
+      {kind === "skillmd" && <p className="mt-1 text-[12px] leading-relaxed text-ink-secondary">{t("plugins.skillmd.manualNote")}</p>}
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label={t("plugins.manual.title")}>
         {KINDS.map((item) => (
           <button
@@ -119,7 +121,9 @@ export function PluginManualAdd() {
               {preview.skills.map((skill) => (
                 <li key={skill.name}>
                   <span className="font-medium text-ink">{skill.name}</span> — {skill.description}
+                  {skill.unreviewed ? ` · ${t("plugins.skillmd.unreviewed")}` : ""}
                   {skill.warnings.length > 0 ? ` (${skill.warnings.length})` : ""}
+                  {skill.preview && <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-inset p-2 font-mono text-[11px] text-ink">{skill.preview}</pre>}
                 </li>
               ))}
             </ul>
