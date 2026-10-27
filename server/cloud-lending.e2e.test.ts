@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { installCloudLending, usualFolders } from "../electron/cloud-lending-ipc.mjs";
 import { createComputerSharing, validateSharedFolders } from "../electron/computer-sharing.mjs";
 import { cloudPairingSignature } from "./cloud-home.ts";
@@ -27,6 +27,8 @@ let log = "";
 let owner = "";
 let connector: ReturnType<typeof createComputerSharing> | undefined;
 const proxies: ChildProcess[] = [];
+// Folders outside the server home. Removed even when a test fails before its own rmSync.
+const scratch: string[] = [];
 
 async function api(method: string, path: string, options: { body?: unknown; token?: string } = {}) {
   const response = await fetch(`${base}${path}`, {
@@ -71,20 +73,36 @@ const readTurns = () => new Map(readdirSync(turnDumps()).filter((name) => name.e
   try { return [[name, readFileSync(join(turnDumps(), name), "utf8")] as const]; } catch { return []; }
 }));
 
-/** Each engine process dumps its own turn, so the turns a restart resumes never take the place of this one. */
+/** Each engine process dumps its own turn, so the turns a restart resumes never take the place of this one.
+ * The dump is written once the fixture CLI has loaded and read its prompt. On a full shard that import
+ * lands after 15s, so the wait is the dump itself, scaled for the host. */
+const TURN_DUMP_TIMEOUT = hostTimeout(90_000);
 async function agentsFor(start: () => Promise<void>, botId: string, threadId?: string) {
   const before = readTurns();
   await start();
-  await expect.poll(() => {
-    for (const [name, text] of readTurns()) {
-      if (before.get(name) === text) continue;
-      let found: Turn;
-      try { found = JSON.parse(text) as Turn; } catch { continue; }
-      const env = found.mcpConfig?.mcpServers?.agents?.env;
-      if (env?.OMB_BOT_ID === botId && (!threadId || env.OMB_THREAD_ID === threadId)) { turn = found; return true; }
-    }
-    return false;
-  }, { timeout: 15_000 }).toBe(true);
+  try {
+    await expect.poll(() => {
+      for (const [name, text] of readTurns()) {
+        if (before.get(name) === text) continue;
+        let found: Turn;
+        try { found = JSON.parse(text) as Turn; } catch { continue; }
+        const env = found.mcpConfig?.mcpServers?.agents?.env;
+        if (env?.OMB_BOT_ID === botId && (!threadId || env.OMB_THREAD_ID === threadId)) { turn = found; return true; }
+      }
+      return false;
+    }, { timeout: TURN_DUMP_TIMEOUT, interval: 50 }).toBe(true);
+  } catch (error) {
+    const described = [...readTurns()].map(([name, text]) => {
+      try {
+        const found = JSON.parse(text) as Turn;
+        const env = found.mcpConfig?.mcpServers?.agents?.env;
+        return `${name} bot=${env?.OMB_BOT_ID ?? "?"} thread=${env?.OMB_THREAD_ID ?? "?"}`;
+      } catch {
+        return `${name} unreadable`;
+      }
+    });
+    throw new Error(`no engine dump for ${botId}${threadId ? ` thread ${threadId}` : ""} after ${TURN_DUMP_TIMEOUT}ms. turns: ${described.join("; ") || "(none)"}\n${log.slice(-1500)}`, { cause: error });
+  }
   return turn.mcpConfig.mcpServers.agents;
 }
 
@@ -166,6 +184,10 @@ async function boot() {
   }
 }
 
+afterEach(() => {
+  for (const path of scratch.splice(0)) rmSync(path, { recursive: true, force: true });
+});
+
 afterAll(async () => {
   connector?.close();
   for (const proxy of proxies) proxy.kill();
@@ -199,6 +221,7 @@ it("the person's Mac, lent through the real connector, is usable by the owner's 
   await leftBehind({ threadIds: [guestOpened, guestsRoom.threadId], routineIds: [rewritten.id] });
 
   const folderPath = realpathSync(mkdtempSync(join(tmpdir(), "omb-cloud-lent-folder-")));
+  scratch.push(folderPath);
   writeFileSync(join(folderPath, "plan.md"), "from the Mac");
   const env = { id: "my-cloud", name: "My Cloud", origin: base };
   let maintainerChecks = 0;
@@ -308,6 +331,8 @@ it("the person's Mac, lent through the real connector, is usable by the owner's 
   const routerHook = await newHook(router.id);
   await deliver(routerHook, "Route this issue.");
   let routerThread = "";
+  // The fixture lists the lent computers before it asks. That MCP call's own ceiling is 60s, and the
+  // card this poll is waiting for does not exist until the list returns.
   await expect.poll(async () => {
     const run = ((await api("GET", "/api/routines", { token: owner })).body.runs ?? []).find((candidate: any) => candidate.webhookId === routerHook.webhook.id);
     if (run?.status === "failed") return `failed: ${run.error}`;
@@ -315,7 +340,7 @@ it("the person's Mac, lent through the real connector, is usable by the owner's 
     routerThread = run.threadId;
     const messages = (await api("GET", `/api/threads/${run.threadId}/messages`, { token: owner })).body.messages ?? [];
     return messages.some((message: any) => message.card?.requestId) ? "working" : run.status;
-  }, { timeout: 20_000 }).toBe("working");
+  }, { timeout: hostTimeout(70_000) }).toBe("working");
   expect((await api("POST", `/api/bots/${router.id}/interrupt`, { token: owner, body: { threadId: routerThread } })).status).toBe(200);
   const postBot = await newBot("Post bot");
   const postHook = await newHook(postBot.id, "post");
@@ -418,7 +443,7 @@ it("the person's Mac, lent through the real connector, is usable by the owner's 
   await expect.poll(async () => (await api("GET", "/api/shared-computers", { token: owner })).body.computers, { timeout: 5000 }).toEqual([]);
   expect((await call("shared_computer", { computer_id: status[0].id, folder_id: folder.id, action: "read_file", path: "plan.md" })).isError).toBe(true);
   rmSync(folderPath, { recursive: true, force: true });
-}, hostTimeout(60_000));
+}, hostTimeout(180_000));
 
 it("on a Cloud home the owner's answer to an options card is recorded as the owner's", async () => {
   // Only the Watcher bot creates options cards (server/options-card.ts), so
@@ -441,13 +466,14 @@ it("on a Cloud home the owner's answer to an options card is recorded as the own
   const answered = await api("PATCH", `/api/bots/${WATCHER_OPTIONS_CARD_BOT_ID}/cards/${messageId}`, { token: owner, body: { answered: "Yes", threadId: made.threadId } });
   expect(answered.status, JSON.stringify(answered.body)).toBe(200);
   expect(answered.body.message.card).toMatchObject({ answered: "Yes", answeredBy: { kind: "session", person: expect.stringMatching(/^p_/) } });
-}, hostTimeout(60_000));
+}, hostTimeout(180_000));
 
 // The customer's bots said his PC was not lent, called it "this Mac", and his switch read off with no reason. My Cloud now
 // remembers each lent computer by name and platform across its own restarts, and its bots say which it is and since when.
 it("My Cloud remembers a lent computer across its restart, says it is offline by name and platform, and that a stopped one is no longer lent", async () => {
   const device = ({ win32: "PC", darwin: "Mac" } as Record<string, string>)[process.platform] ?? "computer";
   const folderPath = realpathSync(mkdtempSync(join(tmpdir(), "omb-cloud-lent-again-")));
+  scratch.push(folderPath);
   writeFileSync(join(folderPath, "plan.md"), "from the computer");
   const env = { id: "my-cloud", name: "My Cloud", origin: base };
   connector?.close();
@@ -499,12 +525,13 @@ it("My Cloud remembers a lent computer across its restart, says it is offline by
   call = await ask();
   expect(JSON.parse((await call("list_shared_computers")).content[0].text).say).toMatch(new RegExp(`^Their ${device} .+ is no longer shared with the Cloud`, "u"));
   rmSync(folderPath, { recursive: true, force: true });
-}, hostTimeout(60_000));
+}, hostTimeout(180_000));
 
 // An update or a host reboot restarts My Cloud under a lending computer. That is not a sign-out: the desktop keeps its one
 // sign-in a quarter hour for a session that really ended, and its switch says it is waiting rather than to open My Cloud.
 it("a computer lending while My Cloud restarts waits for it, never asks to open My Cloud, and is lent again by itself", async () => {
   const folderPath = realpathSync(mkdtempSync(join(tmpdir(), "omb-cloud-lent-restart-")));
+  scratch.push(folderPath);
   const env = { id: "my-cloud", name: "My Cloud", origin: base };
   const problems: string[] = [];
   let signIns = 0;
@@ -537,6 +564,7 @@ it("My Cloud's own page turns this computer's lending on in place, with the inte
   connector = lend(env);
   const lending = connector;
   const root = realpathSync(mkdtempSync(join(tmpdir(), "omb-usual-folders-")));
+  scratch.push(root);
   const usual = ["Desktop", "Documents", "Downloads"].map((name) => { mkdirSync(join(root, name)); return join(root, name); });
   const handlers = new Map<string, (...args: unknown[]) => Promise<any>>();
   installCloudLending({

@@ -85,6 +85,8 @@ await import(${JSON.stringify(pathToFileURL(join(SERVER_DIR, "testing", "fake-cl
       HOME: home, USERPROFILE: home, OMB_DATA_DIR: dataDir, OMB_PORT: String(port), OMB_WEBHOOK_PORT: String(port + 1), OMB_STATIC_DIR: join(home, "web"),
       OMB_CLOUD_ROLE: "home", OMB_CLOUD_MACHINE_ID: "3f9c2a4e-8b1d-4c6e-9a7f-2d5e8c1b0a93", OMB_CLOUD_ADMIN_URL: "https://cloud.example.test",
       OMB_CLOUD_BOOTSTRAP_SECRET: secret, OMB_PUBLIC_URL: `https://${HOST}`, OMB_SYNC_ROOT: join(home, "Synced"),
+      // 10 GiB total, 9 GiB free: above the 2 GiB reserve. The runner's own volume is not the disk under test.
+      OMB_SYNC_DISK_FIXTURE: "10737418240,9663676416",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

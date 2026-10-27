@@ -16,7 +16,7 @@ const SECRETS = [
 const sent: Array<{ url: string; body: unknown }> = [];
 const answer = (url: string) => {
   const json = url.includes("/flags") ? { flags: {}, errorsWhileComputingFlags: false } : { status: 1 };
-  return { status: 200, ok: true, headers: new Headers(), text: async () => JSON.stringify(json), json: async () => json };
+  return new Response(JSON.stringify(json), { status: 200, headers: { "content-type": "application/json" } });
 };
 class RecordingXhr {
   readyState = 0;
@@ -48,32 +48,40 @@ function memoryStorage(seed: Record<string, string> = {}) {
   };
 }
 
-// posthog-js reads these when its module loads, so they are in place before analytics.ts imports it.
-vi.stubGlobal("fetch", async (input: unknown, init?: { body?: unknown }) => {
-  const url = String((input as { url?: string })?.url ?? input);
-  sent.push({ url, body: init?.body });
-  return answer(url);
-});
-vi.stubGlobal("XMLHttpRequest", RecordingXhr);
-Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: (url: string, body: unknown) => (sent.push({ url, body }), true) });
-Object.defineProperty(navigator, "webdriver", { configurable: true, get: () => false });
-Object.defineProperty(navigator, "userAgent", {
-  configurable: true,
-  get: () => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
-});
-Object.defineProperty(document, "referrer", { configurable: true, value: REFERRER });
-vi.stubGlobal("sessionStorage", memoryStorage());
-// What an install that ran a build with save_referrer and save_campaign_params on still holds.
-vi.stubGlobal("localStorage", memoryStorage({
-  [STORED]: JSON.stringify({
-    distinct_id: "01a140ba-9e71-7f25-a581-b39f69b5e934",
-    $device_id: "01a140ba-9e71-7f25-a581-b39f69b5e934",
-    $user_state: "anonymous",
-    $initial_person_info: { r: REFERRER, u: FIRST_PAGE },
-    $initial_referrer_info: { $referrer: REFERRER, $referring_domain: "referrer.example" },
-    $initial_campaign_params: { utm_source: "first-campaign" },
-  }),
-}));
+// posthog-js captures fetch, XHR, and document.readyState once, when its module is first evaluated.
+// Re-install immediately before that import: a worker that already evaluated the module, or a
+// document that is still "loading", records nothing and the assertion sees an empty list.
+function installRecordingNetwork() {
+  vi.stubGlobal("fetch", async (input: unknown, init?: { body?: unknown }) => {
+    const url = String((input as { url?: string })?.url ?? input);
+    sent.push({ url, body: init?.body });
+    return answer(url);
+  });
+  vi.stubGlobal("XMLHttpRequest", RecordingXhr);
+  Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: (url: string, body: unknown) => (sent.push({ url, body }), true) });
+  Object.defineProperty(navigator, "onLine", { configurable: true, get: () => true });
+  Object.defineProperty(navigator, "webdriver", { configurable: true, get: () => false });
+  Object.defineProperty(navigator, "userAgent", {
+    configurable: true,
+    get: () => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+  });
+  Object.defineProperty(document, "referrer", { configurable: true, value: REFERRER });
+  try { Object.defineProperty(document, "readyState", { configurable: true, get: () => "complete" }); } catch { /* already complete */ }
+  try { Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" }); } catch { /* already visible */ }
+  vi.stubGlobal("sessionStorage", memoryStorage());
+  // What an install that ran a build with save_referrer and save_campaign_params on still holds.
+  vi.stubGlobal("localStorage", memoryStorage({
+    [STORED]: JSON.stringify({
+      distinct_id: "01a140ba-9e71-7f25-a581-b39f69b5e934",
+      $device_id: "01a140ba-9e71-7f25-a581-b39f69b5e934",
+      $user_state: "anonymous",
+      $initial_person_info: { r: REFERRER, u: FIRST_PAGE },
+      $initial_referrer_info: { $referrer: REFERRER, $referring_domain: "referrer.example" },
+      $initial_campaign_params: { utm_source: "first-campaign" },
+    }),
+  }));
+}
+installRecordingNetwork();
 // PostHog's CDN config for this project, as posthog-js would have loaded it.
 (window as unknown as Record<string, unknown>)._POSTHOG_REMOTE_CONFIG = {
   [TOKEN]: {
@@ -102,8 +110,11 @@ async function minutes(count: number) {
 it("sends events without any stored or current address, polls nothing, and sends nothing once switched off", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
   try {
+    vi.resetModules();
+    installRecordingNetwork();
     const analytics = await import("./analytics");
     await analytics.initAnalytics();
+    document.dispatchEvent(new Event("DOMContentLoaded"));
     analytics.track("app_snapshot", { bots: 3 });
     analytics.identifyEmail("person@example.com");
     await minutes(11);
