@@ -38,6 +38,9 @@ jobs:
     name: typecheck + lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # tsc -b on this tree exceeds Node's default ~2GB heap (CI OOM, exit 134).
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       contents: read
       # ci-scope reads whether the commit before a push got its own green run
