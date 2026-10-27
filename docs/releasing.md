@@ -22,6 +22,12 @@ published release** workflow
 verifies and publishes its legacy mirror automatically. Never publish only the
 legacy draft.
 
+Android APKs are a separate workflow. Tag `vX.Y.Z` (the `package.json` version
+with a `v` prefix) and push that tag. The steps, the signing secrets, and the
+in-app **Check for update** behavior are in [Android releases](android-releases.md).
+That checker is not the desktop updater. A debug-signed APK cannot upgrade a
+release-signed install, and Android still shows the system install confirmation.
+
 The release commit must have passed CI: the **CI passed on the release commit**
 job waits (while the platforms build) for ci.yml's `CI` check on the pinned
 commit and stops the release before any draft if it failed. If that commit

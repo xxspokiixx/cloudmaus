@@ -16,6 +16,11 @@ on:
 permissions:
   contents: read
 
+# tsc -b on this tree exceeds Node's default ~2GB heap (CI OOM, exit 134).
+# The ceiling is not a reservation; jobs that do not need it stay small.
+env:
+  NODE_OPTIONS: --max-old-space-size=8192
+
 concurrency:
   # A new PR push supersedes that PR's older checks. Main keeps one run going
   # and one waiting: each merge replaces the waiting run, so a burst of
@@ -65,7 +70,7 @@ jobs:
         run: node scripts/ci-scope.mjs
       - run: pnpm install --frozen-lockfile
       - name: Verify CI selection and documentation references
-        run: pnpm exec vitest run scripts/ci-scope.test.ts scripts/ci-workflow.test.ts scripts/testing/verification-docs.test.ts
+        run: pnpm exec vitest run scripts/ci-scope.test.ts scripts/ci-workflow.test.ts scripts/testing/verification-docs.test.ts scripts/android-apk-workflow.test.ts scripts/apk-update.test.ts
       - name: Validate locale catalogs
         run: pnpm i18n:check
       - run: pnpm typecheck

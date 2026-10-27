@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">OpenMausBot</string>
+    <string name="about_title">About</string>
+    <string name="version_label">Version %1$s</string>
+    <string name="check_for_update">Check for update</string>
+    <string name="checking">Checking for updates…</string>
+    <string name="up_to_date">You\'re on the latest version (%1$s).</string>
+    <string name="honesty">Android cannot install an update silently. You will see the system install confirmation. If it is blocked, allow Install unknown apps for OpenMausBot.</string>
+    <string name="update_available_title">Update %1$s</string>
+    <string name="install">Install</string>
+    <string name="not_now">Not now</string>
+    <string name="update_declined">Update skipped.</string>
+    <string name="update_no_notes">No release notes were published.</string>
+    <string name="update_debug_warning">This APK is debug-signed. It cannot replace an install that was signed with the release key.</string>
+    <string name="update_confirm_body">Android will ask you to confirm the install. This app cannot install updates silently.</string>
+    <string name="downloading_title">Downloading update</string>
+    <string name="downloading_progress">Downloading %1$d%%</string>
+    <string name="verifying">Checking the download…</string>
+    <string name="download_cancelled">Download cancelled.</string>
+    <string name="update_offline">You appear to be offline.</string>
+    <string name="update_rate_limit">GitHub\'s rate limit was reached. Try again later.</string>
+    <string name="update_no_release">No stable release is published yet.</string>
+    <string name="update_http">GitHub answered HTTP %1$d.</string>
+    <string name="update_bad_release">The release could not be read.</string>
+    <string name="update_not_stable">The latest release is not a stable release.</string>
+    <string name="update_no_apk">This release has no APK to install.</string>
+    <string name="update_no_checksum">This release has no SHA-256 checksum, so the APK was not installed.</string>
+    <string name="update_checksum_mismatch">The download does not match the published checksum. It was not installed.</string>
+    <string name="update_size_mismatch">The download size does not match the release. It was not installed.</string>
+    <string name="update_ambiguous">This release has more than one APK, so it was not installed.</string>
+    <string name="update_bad_installed">This install\'s version could not be read.</string>
+    <string name="update_failed">The update could not be downloaded.</string>
+    <string name="unknown_sources_title">Allow installs from this app</string>
+    <string name="unknown_sources_body">OpenMausBot needs the Install unknown apps permission before Android will accept an update. This is not a silent install. You will still confirm the system prompt.</string>
+    <string name="open_settings">Open settings</string>
+    <string name="unknown_sources_still_off">Install unknown apps is still off, so the update was not started.</string>
+    <string name="update_install_cancelled">Install cancelled.</string>
+    <string name="update_install_handed_off">Android\'s installer is open. Confirm the system prompt to finish. This app cannot complete the install by itself. The update has to be signed with the same key as this install.</string>
+    <string name="update_install_unavailable">Android did not offer a package installer for this APK.</string>
+</resources>

@@ -192,6 +192,7 @@ describe("CI concurrency", () => {
   it("always starts the workflow and validates selection and docs before fanout", () => {
     expect(workflow.on.pull_request).toBeNull();
     expect(workflow.jobs.static.if).toBeUndefined();
+    expect(workflow.env).toEqual({ NODE_OPTIONS: "--max-old-space-size=8192" });
     expect(workflow.jobs.static.steps[0].with["fetch-depth"]).toBe(0);
     expect(workflow.jobs.static.steps.find((step: { id?: string }) => step.id === "scope").run).toBe("node scripts/ci-scope.mjs");
     expect(workflow.jobs.static.outputs).toEqual({
@@ -200,7 +201,7 @@ describe("CI concurrency", () => {
       vitest_matrix: "${{ steps.scope.outputs.vitest_matrix }}",
     });
     expect(workflow.jobs.static.steps.some((step: { run?: string }) =>
-      step.run === "pnpm exec vitest run scripts/ci-scope.test.ts scripts/ci-workflow.test.ts scripts/testing/verification-docs.test.ts",
+      step.run === "pnpm exec vitest run scripts/ci-scope.test.ts scripts/ci-workflow.test.ts scripts/testing/verification-docs.test.ts scripts/android-apk-workflow.test.ts scripts/apk-update.test.ts",
     )).toBe(true);
     for (const [name, job] of Object.entries(workflow.jobs) as [string, { needs?: string | string[]; if?: string }][]) {
       if (["static", "gate"].includes(name)) continue;
@@ -236,6 +237,27 @@ describe("CI concurrency", () => {
       .flatMap((job) => job.steps ?? []).flatMap((step) => (step.uses && !step.uses.startsWith("./") ? [step.uses] : []));
     expect(uses.length).toBeGreaterThan(0);
     for (const action of uses) expect(action).toMatch(/^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/);
+  });
+
+  it("skips upstream publish, mirror, and release lanes on any other repository", () => {
+    const upstream = "github.repository == 'milind-soni/OpenMausBot'";
+    const release = parse(readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8"));
+    const prepareRelease = parse(readFileSync(new URL("../.github/workflows/prepare-release.yml", import.meta.url), "utf8"));
+    const sync = parse(readFileSync(new URL("../.github/workflows/sync-published-release.yml", import.meta.url), "utf8"));
+    const npm = parse(readFileSync(new URL("../.github/workflows/npm-package.yml", import.meta.url), "utf8"));
+    const docker = parse(readFileSync(new URL("../.github/workflows/docker.yml", import.meta.url), "utf8"));
+    const contributors = parse(readFileSync(new URL("../.github/workflows/contributors.yml", import.meta.url), "utf8"));
+    expect(release.jobs.prepare.if).toBe(upstream);
+    expect(prepareRelease.jobs.prepare.if).toBe(upstream);
+    expect(sync.jobs.mirror.if).toContain(upstream);
+    expect(npm.jobs["publish-npm"].if).toContain(upstream);
+    expect(npm.jobs["update-github-release"].if).toContain(upstream);
+    expect(npm.jobs["pack-and-prove"].if).toBeUndefined();
+    expect(docker.jobs.publish.if).toContain(upstream);
+    expect(docker.jobs["build-and-smoke"].if).toBeUndefined();
+    expect(contributors.jobs.cla.if).toContain(upstream);
+    // The required CI jobs stay. This guard does not skip them.
+    expect(workflow.jobs.gate.if).toBe("${{ !cancelled() }}");
   });
 
   it("keeps the redundant Windows workflow available only for manual debugging", () => {

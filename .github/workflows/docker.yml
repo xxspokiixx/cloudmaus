@@ -312,7 +312,8 @@ jobs:
     needs: build-and-smoke
     # Release dispatches on its published tag because GITHUB_TOKEN-created
     # tags do not start another workflow. A manual branch run is smoke-only.
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v'))
+    # GHCR publish is the upstream release image. The smoke build above still runs everywhere.
+    if: github.repository == 'milind-soni/OpenMausBot' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/tags/v')))
     runs-on: ubuntu-latest
     permissions:
       contents: read

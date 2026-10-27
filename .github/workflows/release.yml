@@ -51,6 +51,9 @@ permissions:
 jobs:
   prepare:
     name: Pin the release commit
+    # Codesign, notarize, and the legacy milind-soni/openmausbot-releases mirror
+    # belong to the upstream repository. Other checkouts skip the whole lane.
+    if: github.repository == 'milind-soni/OpenMausBot'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:

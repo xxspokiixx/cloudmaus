@@ -29,6 +29,8 @@ concurrency:
 jobs:
   prepare:
     name: Open the version-bump PR
+    # The version PR starts the upstream release lane and checks the legacy mirror.
+    if: github.repository == 'milind-soni/OpenMausBot'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

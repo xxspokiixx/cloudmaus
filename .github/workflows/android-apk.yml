@@ -1,0 +1,171 @@
+# Builds the Android APK in android/ and, for a vX.Y.Z tag, publishes it on
+# this repository's Releases page with a SHA-256 checksum asset.
+#
+# The desktop app does not use this workflow. Electron updates stay on
+# electron-updater (see docs/android-releases.md).
+name: Android APK
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Optional vX.Y.Z tag to publish as a GitHub Release. Leave empty to only upload a workflow artifact."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@ac638b010cf58a27ee6c972d7336334ccaf61c96 # v4.4.1
+      - name: Resolve versionName from the tag, or from package.json
+        id: version
+        env:
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || (startsWith(github.ref, 'refs/tags/v') && github.ref_name) || '' }}
+        run: |
+          set -euo pipefail
+          if [ -n "$TAG" ]; then
+            node scripts/android-version.mjs --tag "$TAG" >> "$GITHUB_OUTPUT"
+          else
+            node scripts/android-version.mjs --from-package >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ runner.tool_cache }}/android-sdk
+          key: android-sdk-35-build-tools-35.0.0
+      - name: Install the Android SDK
+        run: |
+          set -euo pipefail
+          sdk="${RUNNER_TOOL_CACHE}/android-sdk"
+          mkdir -p "$sdk/cmdline-tools"
+          if [ ! -x "$sdk/cmdline-tools/latest/bin/sdkmanager" ]; then
+            tmp=$(mktemp -d)
+            curl -fsSL -o "$tmp/cmdtools.zip" https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q "$tmp/cmdtools.zip" -d "$tmp"
+            mkdir -p "$sdk/cmdline-tools/latest"
+            mv "$tmp/cmdline-tools/"* "$sdk/cmdline-tools/latest/"
+          fi
+          export ANDROID_HOME="$sdk"
+          export PATH="$sdk/cmdline-tools/latest/bin:$PATH"
+          mkdir -p "$sdk/licenses"
+          printf '%s\n' "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$sdk/licenses/android-sdk-license"
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+      - name: Choose release signing or the debug keystore
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANDROID_KEYSTORE_BASE64}" ] && [ -n "${ANDROID_KEYSTORE_PASSWORD}" ] && [ -n "${ANDROID_KEY_ALIAS}" ] && [ -n "${ANDROID_KEY_PASSWORD}" ]; then
+            umask 077
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+            echo "mode=release" >> "$GITHUB_OUTPUT"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.keystore" >> "$GITHUB_ENV"
+          else
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Debug-signed APK::ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD are not all set. The artifact is app-debug.apk. A debug-signed APK cannot upgrade a release-signed install."
+          fi
+      - name: Unit tests
+        working-directory: android
+        run: ./gradlew :core:test --stacktrace
+      - name: Assemble the signed release APK
+        if: steps.signing.outputs.mode == 'release'
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --stacktrace -PversionName=${{ steps.version.outputs.versionName }} -PversionCode=${{ steps.version.outputs.versionCode }}
+      - name: Assemble the debug-signed APK
+        if: steps.signing.outputs.mode == 'debug'
+        working-directory: android
+        run: ./gradlew :app:assembleDebug --stacktrace -PversionName=${{ steps.version.outputs.versionName }} -PversionCode=${{ steps.version.outputs.versionCode }}
+      - name: Name the APK, checksum it, and check the baked-in version
+        id: apk
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.versionName }}
+          VERSION_CODE: ${{ steps.version.outputs.versionCode }}
+          SIGNING_MODE: ${{ steps.signing.outputs.mode }}
+        run: |
+          set -euo pipefail
+          if [ "$SIGNING_MODE" = "release" ]; then
+            src=$(find android/app/build/outputs/apk/release -name '*.apk' -print -quit)
+            name=OpenMausBot.apk
+          else
+            src=$(find android/app/build/outputs/apk/debug -name '*.apk' -print -quit)
+            name=app-debug.apk
+          fi
+          test -n "$src"
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp "$src" "$RUNNER_TEMP/apk/$name"
+          (cd "$RUNNER_TEMP/apk" && sha256sum "$name") > "$RUNNER_TEMP/apk/$name.sha256"
+          test "$(awk '{print $1}' "$RUNNER_TEMP/apk/$name.sha256" | wc -c)" -eq 65
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$RUNNER_TEMP/apk/$name"
+          badging=$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/apk/$name")
+          printf '%s\n' "$badging" | grep -F "versionName='$VERSION_NAME'"
+          printf '%s\n' "$badging" | grep -F "versionCode='$VERSION_CODE'"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "checksum=$name.sha256" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-apk
+          path: |
+            ${{ runner.temp }}/apk/*.apk
+            ${{ runner.temp }}/apk/*.sha256
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.tag != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: android-apk
+          path: apk
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag must be vX.Y.Z, got: $TAG"; exit 1; }
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::$TAG already exists. Refusing to replace a published release."
+            exit 1
+          fi
+          # Published, not a draft: the app's unauthenticated lookup cannot see drafts.
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes apk/*
