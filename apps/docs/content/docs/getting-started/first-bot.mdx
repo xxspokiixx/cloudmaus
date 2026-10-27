@@ -1,0 +1,67 @@
+---
+title: Create your first bot
+description: Choose an engine, folder, and working style for a useful first agent.
+icon: Bot
+---
+
+## Before you start
+
+Install and sign in to at least one supported agent CLI. When one already works, the welcome uses it without a step; when none does, the welcome asks you to connect one, with Claude first and the other ways folded under **Other ways**. You can also connect one later from **App settings → Agent engines**.
+
+<ProductScreenshot name="docs-engine-detection" alt="The welcome's Connect an AI step, with the Claude sign-in first and the other ways folded under it" caption="Shown only when no AI works yet. Every other way to connect one is under Other ways." />
+
+## Your first bot is your Chief of Staff
+
+A new install starts with one bot: MausBot, in chrome, your helper for everything in the app and your Chief of Staff. Its first message lists what is left to set up, and it can do each step with you. Rename it or change its color in **Bot settings** like any other bot. MausBot is never deleted: to take it off the sidebar, choose **Hide from sidebar** in its menu, or turn off **Show MausBot in the sidebar** in **Settings → General**. An install that already had bots before MausBot arrived gets one beside them: its Chief of Staff stays as it was, and if it had none, MausBot becomes it. The first time you open the app with MausBot, click its picture to change its name, color, look or picture before adding it. It does the work itself and adds a specialist bot on its own when a job needs one, telling you in one line. In Simple mode, **New bot** opens the Chief's chat with a short starter; say what the bot should do and the Chief adds it. Advanced mode opens the dialog below.
+
+## Create the bot
+
+1. Select **New or share** in the sidebar.
+2. Choose **New bot**.
+3. Review the **New bot** dialog. Its settings start from your saved defaults, and the suggested name remains editable.
+4. Give the bot a clear name and purpose in **Identity**, then select its engine and model in **Model**.
+5. Review the other sections: **Soul**, **Skills**, **Memory**, **Routines**, **Access**, **Permissions**, and **Voice & alerts**. Choose a working folder in **Access** if it should edit files or work in a repository.
+6. Select **Create bot**. Closing or cancelling the dialog discards the draft without creating a bot.
+
+The working folder matters: it becomes the bot's starting context and limits accidental edits elsewhere. Use a dedicated project folder for coding, research, or content work.
+
+In **Identity**, **Random female name** and **Random male name** insert a local
+suggestion into the editable name field. Click again for another suggestion
+or type your own. The lists contain 4,944 female and 3,897 male names from
+stdlib's English-language Moby Word II datasets. Choosing a name does not
+create a bot, call a model, or change any other profile setting.
+
+## Set defaults for future bots
+
+Open **App settings → General → Defaults for new bots → Edit**. This opens the same editor as bot creation. Save the identity, model, instructions, access preferences, memory, skills, and routines you want future bots to start with. Leave the name empty for a random suggested name each time.
+
+Saving defaults does not change existing bots or start routines. When creating a bot, you can override or clear any inherited value. New bots start at Full access unless the saved defaults pick another level. A saved level applies to the new bot at once, with no confirmation; local-computer Auto still asks for its confirmation when the bot is created.
+
+These full templates apply to the creation dialog and the HTTP bot-creation endpoint. Bot-driven team setup applies at once with an Undo; it does not automatically copy template memory, skills, or routines.
+
+## Give it a useful first task
+
+Start with a concrete outcome and the constraints that matter:
+
+```text
+Review this project, run the tests, and explain the three highest-impact issues.
+Do not change files yet. Link each finding to the relevant file.
+```
+
+Once you trust the diagnosis, ask the bot to implement the change. This keeps review and mutation as separate, easy-to-check steps.
+
+## Tune the bot
+
+Open **Bot settings** to change its name, avatar, instructions, engine, model, working folder, and computer setup. Different bots can use different engines and folders at the same time.
+
+<Callout type="warn" title="Authentication belongs to the CLI">
+  OpenMausBot launches agent tools you installed. If an engine returns a 401 or asks you to sign in, finish that engine's own CLI login, then refresh detection in App settings.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Add connected apps" href="/docs/connected-apps" description="Let the bot work with services you authorize." />
+  <Card title="Add a computer" href="/docs/computers" description="Give it a desktop for visual workflows." />
+  <Card title="Schedule the task" href="/docs/features/automation" description="Turn a successful prompt into recurring work." />
+</Cards>
