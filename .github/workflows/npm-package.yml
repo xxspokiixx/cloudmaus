@@ -19,6 +19,11 @@ on:
 permissions:
   contents: read
 
+# vite build on this tree exceeds Node's default ~2GB heap (CI OOM, exit 134).
+# The ceiling is not a reservation.
+env:
+  NODE_OPTIONS: --max-old-space-size=8192
+
 jobs:
   pack-and-prove:
     name: assemble, pack, run standalone
