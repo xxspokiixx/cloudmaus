@@ -15,13 +15,13 @@ Neither path downloads an APK.
 
 `package.json` `"version"` is the single version string (`X.Y.Z`).
 
-- A release tag must be `v` plus that string, for example `v0.1.129`.
+- A release tag must be `v` plus that string, for example `v0.1.130`.
 - `scripts/android-version.mjs` refuses a tag that does not match `package.json`.
 - The APK `versionName` is that string. Gradle also refuses a `-PversionName`
   or `-PversionCode` that disagrees with it.
 - `versionCode` is `major * 1_000_000 + minor * 1_000 + patch`. Each component
-  must fit: major &lt; 2100, minor &lt; 1000, patch &lt; 1000. `0.1.129` is version
-  code `1129`. The installed app reads `versionName` back from the package
+  must fit: major &lt; 2100, minor &lt; 1000, patch &lt; 1000. `0.1.130` is version
+  code `1130`. The installed app reads `versionName` back from the package
   manager, which is the value baked in at build time.
 
 The in-app checker compares that `versionName` with the tag on the latest

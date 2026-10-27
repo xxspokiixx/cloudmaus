@@ -27,6 +27,12 @@ describe("Android APK workflow", () => {
     expect(text).toContain("sha256sum");
     expect(text).toContain(".sha256");
     expect(text).toContain("java-version: 17");
+    // ubuntu-latest sets ANDROID_SDK_ROOT to its preinstalled SDK. AGP aborts
+    // when that path differs from ANDROID_HOME, so the workflow installs into
+    // one SDK and points both variables at it.
+    expect(text).toContain('sdkmanager --sdk_root="$sdk"');
+    expect(text).toContain('echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"');
+    expect(text).toContain('echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"');
     expect(text).toContain("./gradlew :core:test");
     expect(text).toContain(":app:assembleRelease");
     expect(text).toContain(":app:assembleDebug");
