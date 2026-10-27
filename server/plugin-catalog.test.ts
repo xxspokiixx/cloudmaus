@@ -59,6 +59,18 @@ describe("plugin catalog", () => {
     ]);
     expect(register).toEqual(["github", "hubspot", "slack", "x", "zoom"]);
     expect(token).toEqual([]);
+    const skillmd = entries.find((entry) => entry.id === "skillmd");
+    expect(skillmd?.mcp).toMatchObject({
+      url: "https://api.skillmd.com/mcp",
+      transport: "http",
+      auth: "none",
+      dcr: false,
+      scopes: [],
+      verified: true,
+    });
+    expect(skillmd?.mcp?.clientId).toBeUndefined();
+    expect(pluginActions(skillmd!).map((action) => action.kind)).toEqual(["add"]);
+    expect(catalogOAuthBody(skillmd!.mcp!)).toBeUndefined();
     for (const entry of entries) {
       const manual = pluginActions(entry).some((action) => action.kind === "manual");
       if (entry.mcp && !entry.mcp.verified) expect(manual, entry.id).toBe(true);
@@ -99,5 +111,32 @@ describe("plugin catalog", () => {
     expect(catalogServerName("teams", "https://workiq.svc.cloud.microsoft/mcp/", servers)).toBe("outlook");
     expect(catalogServerName("slack", "https://mcp.slack.com/mcp", servers)).toBe("slack");
     expect(catalogServerName("slack", "https://mcp.slack.com/mcp", [...servers, { name: "slack", url: "https://example.com" }])).toBe("slack-2");
+  });
+
+  it("refuses a client id or dynamic registration on a no-auth server", () => {
+    const card = {
+      id: "example",
+      name: "Example",
+      description: "Example server.",
+      category: "developer-tools",
+      kind: "connector",
+      docsUrl: "https://example.com/docs",
+      mcp: {
+        url: "https://api.skillmd.com/mcp",
+        transport: "http",
+        auth: "none",
+        dcr: false,
+        scopes: [],
+        verified: true,
+        probedAt: "2026-10-27",
+      },
+    };
+    expect(Array.isArray(parsePluginCatalog([card]))).toBe(true);
+    expect(parsePluginCatalog([{ ...card, id: "with-client", mcp: { ...card.mcp, clientId: "public-client" } }])).toEqual({
+      error: "with-client: a no-auth server does not take a client id",
+    });
+    expect(parsePluginCatalog([{ ...card, id: "with-dcr", mcp: { ...card.mcp, dcr: true } }])).toEqual({
+      error: "with-dcr: a no-auth server does not use dynamic registration",
+    });
   });
 });

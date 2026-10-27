@@ -12,6 +12,7 @@ import {
 } from "../../shared/plugin-catalog";
 import { openBotSettings } from "./bot-panel/panel-link";
 import { PluginManualAdd } from "./PluginManualAdd";
+import { SkillMdBrowse } from "./SkillMdBrowse";
 import { WhopIcon } from "./WhopIcon";
 
 const parsed = parsePluginCatalog(catalogJson);
@@ -30,7 +31,10 @@ function entryConnected(entry: PluginEntry, servers: ListedServer[] | null, inst
   if (installed.includes(entry.id) && entry.kind !== "connector") return true;
   if (!entry.mcp) return false;
   if (!servers) return entry.id === "whop" && whopConnected === true;
-  return servers.some((server) => server.url && sameMcpUrl(server.url, entry.mcp!.url) && server.enabled === true && server.auth === "signed-in");
+  return servers.some((server) => {
+    if (!server.url || !sameMcpUrl(server.url, entry.mcp!.url) || server.enabled !== true) return false;
+    return entry.mcp!.auth === "none" || server.auth === "signed-in";
+  });
 }
 
 /** One marketplace grid. Connect is browser OAuth. A missing public client id is a registration note, not a form. */
@@ -138,9 +142,44 @@ export function PluginCatalog({ search, onlyConnected, whopRefresh, whopConnecte
     if (!server) return;
     setBusy(entry.id);
     try {
-      await api(`/api/mcp/servers/${encodeURIComponent(server.name)}`, { method: "PATCH", body: JSON.stringify({ enabled: false }) });
+      const disabled = await api<{ servers?: ListedServer[] }>(`/api/mcp/servers/${encodeURIComponent(server.name)}`, { method: "PATCH", body: JSON.stringify({ enabled: false }) });
+      if (entry.mcp.auth === "none") {
+        setServers(disabled.servers ?? null);
+        return;
+      }
       const body = await api<{ servers?: ListedServer[] }>(`/api/mcp/servers/${encodeURIComponent(server.name)}/sign-out`, { method: "POST" });
       setServers(body.servers ?? null);
+    } catch (cause) {
+      fail(entry.id, cause);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function addOpen(entry: PluginEntry) {
+    if (!entry.mcp || entry.mcp.auth !== "none" || busy) return;
+    const known = servers ?? [];
+    const name = catalogServerName(entry.id, entry.mcp.url, known);
+    const existing = known.find((server) => server.name === name);
+    setBusy(entry.id);
+    setErrors((current) => ({ ...current, [entry.id]: "" }));
+    try {
+      if (!existing) {
+        await api("/api/mcp/servers", {
+          method: "POST",
+          body: JSON.stringify({ name, type: entry.mcp.transport, url: entry.mcp.url, enabled: false }),
+        });
+      }
+      const tested = await api<{ ok?: boolean; error?: string }>(`/api/mcp/servers/${encodeURIComponent(name)}/test`, { method: "POST" });
+      if (!tested.ok) {
+        fail(entry.id, tested.error || t("plugins.toolsFailed"));
+        return;
+      }
+      const enabled = await api<{ servers?: ListedServer[] }>(`/api/mcp/servers/${encodeURIComponent(name)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: true }),
+      });
+      setServers(enabled.servers ?? null);
     } catch (cause) {
       fail(entry.id, cause);
     } finally {
@@ -284,6 +323,21 @@ export function PluginCatalog({ search, onlyConnected, whopRefresh, whopConnecte
                         </a>
                       );
                     }
+                    if (action.kind === "add") {
+                      const label = t(connected ? "connectors.disconnect" : "plugins.skillmd.add");
+                      return (
+                        <button
+                          key="add"
+                          type="button"
+                          aria-label={t(connected ? "plugins.skillmd.disconnect" : "plugins.skillmd.addNamed")}
+                          disabled={pending}
+                          onClick={() => void (connected ? disconnect(entry) : addOpen(entry))}
+                          className="inline-flex h-7 min-w-[64px] shrink-0 items-center justify-center gap-2 rounded-full bg-control/80 px-3 text-[13px] font-medium leading-5 text-ink hover:bg-raised-hover disabled:opacity-40"
+                        >
+                          {pending ? <Loader2 size={14} className="animate-spin" /> : label}
+                        </button>
+                      );
+                    }
                     if (action.kind === "token") {
                       return (
                         <button key="token" type="button" onClick={() => setTokenFor(entry.id)} className="inline-flex h-7 shrink-0 items-center rounded-full bg-control/80 px-3 text-[13px] font-medium leading-5 text-ink">
@@ -308,6 +362,9 @@ export function PluginCatalog({ search, onlyConnected, whopRefresh, whopConnecte
               {errors[entry.id] && <p role="alert" className="mt-1 ps-[52px] text-[12px] text-danger">{errors[entry.id]}</p>}
               {actions.some((action) => action.kind === "register") && (
                 <p className="mt-1 ps-[52px] text-[12px] text-ink-secondary">{t("plugins.registerHint")}</p>
+              )}
+              {actions.some((action) => action.kind === "add") && !connected && (
+                <p className="mt-1 ps-[52px] text-[12px] text-ink-secondary">{t("plugins.skillmd.addHint")}</p>
               )}
               {tokenFor === entry.id && (
                 <form className="mt-2 ps-[52px]" onSubmit={(event) => { event.preventDefault(); void saveToken(entry); }}>
@@ -348,6 +405,7 @@ export function PluginCatalog({ search, onlyConnected, whopRefresh, whopConnecte
           );
         })}
       </div>
+      {!onlyConnected && !query && <SkillMdBrowse />}
       {!onlyConnected && !query && <PluginManualAdd />}
     </section>
   );
