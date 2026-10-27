@@ -91,6 +91,7 @@ import { RoomTurnDeadline, RoomTurnStallRegistry, effectiveRoomTurnTimeoutMinute
 import { roomTurnEnd, type RoomClaimEnd } from "./room-turn-end.ts";
 import { applyHoldDirective, classifyHoldDirective, heldMemberLine, rememberHeldMessage, stopWordPlacement } from "./room-holds.ts";
 import { createPersonStop } from "./host/person-stop.ts";
+import { createShutdownTurnNotes } from "./host/shutdown-turn-notes.ts";
 import { finishedWithoutSummaryLine, ROOM_SUMMARY_REASK, roomTurnNarrationIds, roomTurnReply } from "./room-reply.ts";
 import { pickComputer } from "./computer-selection.ts";
 import * as boat from "./boat.ts";
@@ -16062,28 +16063,9 @@ if (TUNNEL_SOCKET) {
   });
 }
 
-/** A root the runtime holds is the runtime's to account for at the next start: a line here, with Retry, would start the job a second time. */
-function noteTurnsCutByShutdown(): void {
-  const cut = (threadId: string) => !coordinator.continuesAfterRestart(threadId) && !runtimeHoldsRoot(threadId);
-  for (const bot of store.bots) {
-    for (const task of store.tasks(bot.id)) {
-      if (threadBusy(bot.id, task.threadId) && cut(task.threadId)) {
-        store.appendMessage(task.threadId, { role: "bot", kind: "activity", tool: failedTurnTool("turn interrupted — OpenMausBot restarted") });
-      }
-    }
-  }
-  for (const group of store.groups) {
-    for (const threadId of group.dm ? [group.threadId] : store.groupTasks(group.id).map((task) => task.threadId)) {
-      if (!groupThreadIsWorking(group.id, threadId) || !cut(threadId)) continue;
-      const speaker = groupSpeakers.get(threadId);
-      store.appendMessage(threadId, { role: "bot", kind: "activity", ...(speaker ? { from: speaker } : {}), tool: failedTurnTool("turn interrupted — OpenMausBot restarted") });
-    }
-  }
-}
-
-function runtimeHoldsRoot(threadId: string): boolean {
-  return coordinator.active().some((n) => !n.parentId && n.threadId === threadId && !ENDED.has(n.status));
-}
+const { noteTurnsCutByShutdown } = createShutdownTurnNotes({
+  coordinator, store, threadBusy, groupThreadIsWorking, groupSpeakers, ENDED,
+});
 
 const gracefulShutdown = createGracefulShutdown({
   cleanup: [
