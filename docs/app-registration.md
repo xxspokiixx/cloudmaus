@@ -63,17 +63,70 @@ Dynamic registration answered on the live metadata probe on 2026-10-27. Connect 
   - Docs: https://github.com/whopio/whop-mcp-server
   - Scopes the server advertises: `admin`
 
-## The owner registers a public client, then people just click Connect
+## Microsoft 365 is registered
 
-These servers have a documented MCP URL and OAuth metadata, and the metadata has no `registration_endpoint`. `mcp.clientId` is empty on purpose. No client id from a vendor sample, Cursor plugin, or HTTP header is copied in.
+Outlook, Outlook Calendar, Teams, SharePoint, and OneDrive share one server, `https://workiq.svc.cloud.microsoft/mcp`, and one public client id: `6bfa5a3d-30cd-4945-acff-4a925d2e9aa7`. That id is set on `onedrive`, `outlook`, `outlook-calendar`, `sharepoint`, and `teams`. No client secret is stored. Those five cards show **Connect**.
 
-## Register once, then paste the client id
+Redirect URI: `http://127.0.0.1:33871/mcp-oauth/callback`. Delegated scope: `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`. That GUID is Microsoft’s Work IQ resource. Sign-in uses `https://login.microsoftonline.com/organizations`, so the person is not asked for a tenant id.
 
-Several cards are one registration.
+The app registration that produced this client id uses a public client (mobile and desktop) with that redirect URI, **Allow public client flows**, and the delegated Work IQ scope. Microsoft’s token endpoint currently advertises `client_secret_post`, `private_key_jwt`, `client_secret_basic`, and `self_signed_tls_client_auth`. OpenMausBot sends PKCE S256 with token endpoint auth method `none`. If Microsoft rejects that exchange, sign-in stops. Do not add a secret to the catalog.
 
-**Microsoft 365 — Outlook, Outlook Calendar, Teams, SharePoint, OneDrive.** These five cards are one server, `https://workiq.svc.cloud.microsoft/mcp`. Register one public client. One redirect URI: `http://127.0.0.1:33871/mcp-oauth/callback`. One delegated scope: `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`. That GUID is Microsoft’s Work IQ resource, not your client id. Put the same client id on `onedrive`, `outlook`, `outlook-calendar`, `sharepoint`, and `teams`. Sign-in uses `https://login.microsoftonline.com/organizations`, so the person is not asked for a tenant id. In the app registration: Authentication → add the redirect URI as a public client (mobile and desktop) → enable Allow public client flows. API permissions → add that delegated scope. Microsoft’s token endpoint currently advertises `client_secret_post`, `private_key_jwt`, `client_secret_basic`, and `self_signed_tls_client_auth`, not `none`. OpenMausBot still sends a public client with PKCE. If Microsoft rejects that, sign-in stops. Do not put a secret in the catalog.
+## Google Workspace — register one Web application for six cards
 
-**Google — Gmail, Calendar, Docs, Drive, Sheets, Slides.** Each product has its own MCP URL, so each has its own redirect URI (listed on that product below). One Web application client can hold all six. Turn on **Use this client for an AI-powered agent**. Copy that client id into each of the six entries. Do not create a client secret. Google’s token endpoint currently advertises `client_secret_post` and `client_secret_basic`, not `none`. OpenMausBot still sends a public client with PKCE. If Google rejects that, sign-in stops.
+Checked against [Configure the Google Workspace MCP servers](https://developers.google.com/workspace/guides/configure-mcp-servers) (last updated 2026-10-27 UTC). The page is labeled Developer Preview.
+
+Gmail, Google Calendar, Google Docs, Google Drive, Google Sheets, and Google Slides each have their own MCP URL, so each has its own loopback redirect URI. One OAuth client can hold all six. Google’s page also lists Chat, People, and Classroom. Those three are not Connect cards in this catalog.
+
+### What Google’s page specifies
+
+Google’s guide says to create the client as a **Web application**, turn on **Use this client for an AI-powered agent**, and copy both the client id and the client secret. The redirect URIs on that page are `https://antigravity.google/oauth-callback` and `https://claude.ai/api/mcp/auth_callback`.
+
+A Desktop client is not described on that page, so a Desktop client cannot be verified as accepted by these MCP servers. PKCE with token endpoint auth method `none` is also absent: the Antigravity and Claude examples send a client secret, and the live authorization-server metadata for these hosts lists `client_secret_post` and `client_secret_basic`. Whether a Web application client with PKCE and no secret is accepted cannot be verified from Google’s docs. OpenMausBot still sends PKCE S256 and method `none`, and this catalog does not store a secret. If Google rejects that exchange, sign-in stops.
+
+Google’s page says a refresh token is issued only when the authorization request includes `access_type=offline`. This app’s sign-in request sends `code_challenge` and `code_challenge_method=S256` and does not send `access_type`. Google says that without a refresh token the person signs in again about every hour.
+
+The consent-screen scopes on Google’s page are shorter than the scopes in each server’s protected-resource metadata. Once `mcp.clientId` is set, Connect requests the metadata list under **Scopes Connect will request**. Whether Google’s consent screen accepts that longer list cannot be verified from the page.
+
+### Steps
+
+1. Join the Google Workspace Developer Preview Program. Google’s page lists that membership as a prerequisite.
+2. In the same Google Cloud project, enable the product API and the MCP service for each card you want: Gmail API and `gmailmcp.googleapis.com`, Google Drive API and `drivemcp.googleapis.com`, Google Docs API and `docsmcp.googleapis.com`, Google Sheets API and `sheetsmcp.googleapis.com`, Google Slides API and `slidesmcp.googleapis.com`, Google Calendar API and `calendarmcp.googleapis.com`.
+3. Open Google Auth Platform → Branding and finish the consent screen. Choose Audience **Internal** when the project allows it. When it does not, choose **External** and add test users. Under Data Access, add the scopes for the products you enable. Google’s page lists these consent-screen scopes:
+
+   - Gmail: `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/gmail.compose`
+   - Google Calendar: `https://www.googleapis.com/auth/calendar.calendarlist.readonly`, `https://www.googleapis.com/auth/calendar.events.freebusy`, `https://www.googleapis.com/auth/calendar.events.readonly`
+   - Google Docs: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/drive.file`, `https://www.googleapis.com/auth/documents.readonly`, `https://www.googleapis.com/auth/documents`
+   - Google Drive: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/drive.file`
+   - Google Sheets: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/drive.file`, `https://www.googleapis.com/auth/spreadsheets.readonly`, `https://www.googleapis.com/auth/spreadsheets`
+   - Google Slides: `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/drive.file`, `https://www.googleapis.com/auth/presentations.readonly`, `https://www.googleapis.com/auth/presentations`
+
+4. Google Auth Platform → Clients → Create Client. Select **Web application**. Enter a name. Add these six authorized redirect URIs, exactly:
+
+   - Gmail (`gmail`, `https://gmailmcp.googleapis.com/mcp/v1`): `http://127.0.0.1:30920/mcp-oauth/callback`
+   - Google Calendar (`google-calendar`, `https://calendarmcp.googleapis.com/mcp/v1`): `http://127.0.0.1:31572/mcp-oauth/callback`
+   - Google Docs (`google-docs`, `https://docsmcp.googleapis.com/mcp/v1`): `http://127.0.0.1:25227/mcp-oauth/callback`
+   - Google Drive (`google-drive`, `https://drivemcp.googleapis.com/mcp/v1`): `http://127.0.0.1:26106/mcp-oauth/callback`
+   - Google Sheets (`google-sheets`, `https://sheetsmcp.googleapis.com/mcp/v1`): `http://127.0.0.1:27862/mcp-oauth/callback`
+   - Google Slides (`google-slides`, `https://slidesmcp.googleapis.com/mcp/v1`): `http://127.0.0.1:35428/mcp-oauth/callback`
+
+5. Select **Use this client for an AI-powered agent**. Create the client. Google’s console shows a client secret next to the client id.
+6. Copy only the client id into `shared/plugin-catalog.json` on `gmail`, `google-calendar`, `google-docs`, `google-drive`, `google-sheets`, and `google-slides`, each as `mcp.clientId`. Leave the client secret in Google’s console. There is no `clientSecret` field in the catalog.
+7. Ship the catalog. Each of those six cards then shows Connect.
+
+### Scopes Connect will request
+
+These are the scopes from each server’s protected-resource metadata, probed 2026-10-27. They are the list Connect sends after a client id is set.
+
+- **Gmail** (`gmail`): `https://mail.google.com/`, `https://www.googleapis.com/auth/gmail.compose`, `https://www.googleapis.com/auth/gmail.drafts`, `https://www.googleapis.com/auth/gmail.drafts.create`, `https://www.googleapis.com/auth/gmail.drafts.readonly`, `https://www.googleapis.com/auth/gmail.labels`, `https://www.googleapis.com/auth/gmail.metadata`, `https://www.googleapis.com/auth/gmail.modify`, `https://www.googleapis.com/auth/gmail.readonly`, `https://www.googleapis.com/auth/gmail.send`, `https://www.googleapis.com/auth/gmail.settings.basic`
+- **Google Calendar** (`google-calendar`): `https://www.googleapis.com/auth/calendar`, `https://www.googleapis.com/auth/calendar.acls`, `https://www.googleapis.com/auth/calendar.calendarlist`, `https://www.googleapis.com/auth/calendar.calendarlist.readonly`, `https://www.googleapis.com/auth/calendar.calendars`, `https://www.googleapis.com/auth/calendar.calendars.readonly`, `https://www.googleapis.com/auth/calendar.events`, `https://www.googleapis.com/auth/calendar.events.freebusy`, `https://www.googleapis.com/auth/calendar.events.readonly`, `https://www.googleapis.com/auth/calendar.freebusy`, `https://www.googleapis.com/auth/calendar.readonly`, `https://www.googleapis.com/auth/calendar.settings.readonly`
+- **Google Docs** (`google-docs`): `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/documents.readonly`, `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/documents`
+- **Google Drive** (`google-drive`): `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/drive.file`
+- **Google Sheets** (`google-sheets`): `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/spreadsheets.readonly`, `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/spreadsheets`
+- **Google Slides** (`google-slides`): `https://www.googleapis.com/auth/drive.readonly`, `https://www.googleapis.com/auth/presentations.readonly`, `https://www.googleapis.com/auth/drive`, `https://www.googleapis.com/auth/drive.file`, `https://www.googleapis.com/auth/presentations`
+
+## Still waiting on a public client id
+
+These servers have a documented MCP URL and OAuth metadata, and the metadata has no `registration_endpoint`. `mcp.clientId` is still empty on GitHub, the six Google cards, HubSpot, Slack, X, and Zoom. No client id from a vendor sample, Cursor plugin, or HTTP header is copied in.
 
 **Where the client id goes.** On that plugin’s `mcp` object in `shared/plugin-catalog.json`:
 
@@ -81,7 +134,7 @@ Several cards are one registration.
 "clientId": "the public client id"
 ```
 
-There is no `clientSecret` field. Leave `clientId` out until you have one. The card then says Needs app registration and links to the vendor page for that product. The per-product steps below are the exact redirect URI and scopes.
+There is no `clientSecret` field. Leave `clientId` out until you have one. The card then says Needs app registration and links to the vendor page for that product. The per-product steps below repeat the redirect URI and metadata scopes. The six Google cards follow **Google Workspace — register one Web application for six cards** above.
 
 ### GitHub
 
@@ -115,7 +168,7 @@ Registration docs: https://developers.google.com/workspace/guides/configure-mcp-
 
 The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
 
-In Google Auth Platform → Clients → Create Client, choose Web application, add the redirect URI, and turn on **Use this client for an AI-powered agent**. Copy the client id only. Google’s metadata currently allows `client_secret_post` and `client_secret_basic`, not `none`; see the note above.
+Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
 
 ### Google Calendar
 
@@ -133,7 +186,7 @@ Registration docs: https://developers.google.com/workspace/guides/configure-mcp-
 
 The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
 
-In Google Auth Platform → Clients → Create Client, choose Web application, add the redirect URI, and turn on **Use this client for an AI-powered agent**. Copy the client id only. Google’s metadata currently allows `client_secret_post` and `client_secret_basic`, not `none`; see the note above.
+Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
 
 ### Google Docs
 
@@ -151,7 +204,7 @@ Registration docs: https://developers.google.com/workspace/guides/configure-mcp-
 
 The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
 
-In Google Auth Platform → Clients → Create Client, choose Web application, add the redirect URI, and turn on **Use this client for an AI-powered agent**. Copy the client id only. Google’s metadata currently allows `client_secret_post` and `client_secret_basic`, not `none`; see the note above.
+Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
 
 ### Google Drive
 
@@ -169,7 +222,7 @@ Registration docs: https://developers.google.com/workspace/guides/configure-mcp-
 
 The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
 
-In Google Auth Platform → Clients → Create Client, choose Web application, add the redirect URI, and turn on **Use this client for an AI-powered agent**. Copy the client id only. Google’s metadata currently allows `client_secret_post` and `client_secret_basic`, not `none`; see the note above.
+Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
 
 ### Google Sheets
 
@@ -187,7 +240,7 @@ Registration docs: https://developers.google.com/workspace/guides/configure-mcp-
 
 The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
 
-In Google Auth Platform → Clients → Create Client, choose Web application, add the redirect URI, and turn on **Use this client for an AI-powered agent**. Copy the client id only. Google’s metadata currently allows `client_secret_post` and `client_secret_basic`, not `none`; see the note above.
+Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
 
 ### Google Slides
 
@@ -205,7 +258,7 @@ Registration docs: https://developers.google.com/workspace/guides/configure-mcp-
 
 The live metadata lists token endpoint auth `client_secret_post`, `client_secret_basic` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
 
-In Google Auth Platform → Clients → Create Client, choose Web application, add the redirect URI, and turn on **Use this client for an AI-powered agent**. Copy the client id only. Google’s metadata currently allows `client_secret_post` and `client_secret_basic`, not `none`; see the note above.
+Follow **Google Workspace — register one Web application for six cards** above for the client type, all six redirect URIs, both scope lists, and what Google’s page does not verify. A Desktop client is not described there.
 
 ### HubSpot
 
@@ -231,15 +284,7 @@ MCP URL: `https://workiq.svc.cloud.microsoft/mcp`
 
 Registration docs: https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:33871/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`
-4. Put only the client id in `shared/plugin-catalog.json` under `onedrive` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
-
-The live metadata lists token endpoint auth `client_secret_post`, `private_key_jwt`, `client_secret_basic`, `self_signed_tls_client_auth` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Microsoft Entra is used at the **organizations** endpoint (`https://login.microsoftonline.com/organizations`), which covers work and school accounts without asking for a tenant id. The `common` endpoint is the same metadata shape; the protected-resource document names organizations, so that is the one sign-in uses. In the app registration, under Authentication, add a mobile/desktop public client and the redirect URI above. Under API permissions, add the Work IQ delegated scope from the list (the GUID in the scope is Microsoft’s resource app, not your client id). Enable “Allow public client flows”.
+Registered. Public client id `6bfa5a3d-30cd-4945-acff-4a925d2e9aa7` is on `mcp.clientId`. No client secret is stored. This card shows Connect. Redirect URI `http://127.0.0.1:33871/mcp-oauth/callback`. Scope `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`. Sign-in uses the **organizations** endpoint. See **Microsoft 365 is registered**.
 
 ### Outlook
 
@@ -249,15 +294,7 @@ MCP URL: `https://workiq.svc.cloud.microsoft/mcp`
 
 Registration docs: https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:33871/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`
-4. Put only the client id in `shared/plugin-catalog.json` under `outlook` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
-
-The live metadata lists token endpoint auth `client_secret_post`, `private_key_jwt`, `client_secret_basic`, `self_signed_tls_client_auth` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Microsoft Entra is used at the **organizations** endpoint (`https://login.microsoftonline.com/organizations`), which covers work and school accounts without asking for a tenant id. The `common` endpoint is the same metadata shape; the protected-resource document names organizations, so that is the one sign-in uses. In the app registration, under Authentication, add a mobile/desktop public client and the redirect URI above. Under API permissions, add the Work IQ delegated scope from the list (the GUID in the scope is Microsoft’s resource app, not your client id). Enable “Allow public client flows”.
+Registered. Public client id `6bfa5a3d-30cd-4945-acff-4a925d2e9aa7` is on `mcp.clientId`. No client secret is stored. This card shows Connect. Redirect URI `http://127.0.0.1:33871/mcp-oauth/callback`. Scope `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`. Sign-in uses the **organizations** endpoint. See **Microsoft 365 is registered**.
 
 ### Outlook Calendar
 
@@ -267,15 +304,7 @@ MCP URL: `https://workiq.svc.cloud.microsoft/mcp`
 
 Registration docs: https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:33871/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`
-4. Put only the client id in `shared/plugin-catalog.json` under `outlook-calendar` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
-
-The live metadata lists token endpoint auth `client_secret_post`, `private_key_jwt`, `client_secret_basic`, `self_signed_tls_client_auth` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Microsoft Entra is used at the **organizations** endpoint (`https://login.microsoftonline.com/organizations`), which covers work and school accounts without asking for a tenant id. The `common` endpoint is the same metadata shape; the protected-resource document names organizations, so that is the one sign-in uses. In the app registration, under Authentication, add a mobile/desktop public client and the redirect URI above. Under API permissions, add the Work IQ delegated scope from the list (the GUID in the scope is Microsoft’s resource app, not your client id). Enable “Allow public client flows”.
+Registered. Public client id `6bfa5a3d-30cd-4945-acff-4a925d2e9aa7` is on `mcp.clientId`. No client secret is stored. This card shows Connect. Redirect URI `http://127.0.0.1:33871/mcp-oauth/callback`. Scope `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`. Sign-in uses the **organizations** endpoint. See **Microsoft 365 is registered**.
 
 ### SharePoint
 
@@ -285,15 +314,7 @@ MCP URL: `https://workiq.svc.cloud.microsoft/mcp`
 
 Registration docs: https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:33871/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`
-4. Put only the client id in `shared/plugin-catalog.json` under `sharepoint` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
-
-The live metadata lists token endpoint auth `client_secret_post`, `private_key_jwt`, `client_secret_basic`, `self_signed_tls_client_auth` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Microsoft Entra is used at the **organizations** endpoint (`https://login.microsoftonline.com/organizations`), which covers work and school accounts without asking for a tenant id. The `common` endpoint is the same metadata shape; the protected-resource document names organizations, so that is the one sign-in uses. In the app registration, under Authentication, add a mobile/desktop public client and the redirect URI above. Under API permissions, add the Work IQ delegated scope from the list (the GUID in the scope is Microsoft’s resource app, not your client id). Enable “Allow public client flows”.
+Registered. Public client id `6bfa5a3d-30cd-4945-acff-4a925d2e9aa7` is on `mcp.clientId`. No client secret is stored. This card shows Connect. Redirect URI `http://127.0.0.1:33871/mcp-oauth/callback`. Scope `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`. Sign-in uses the **organizations** endpoint. See **Microsoft 365 is registered**.
 
 ### Slack
 
@@ -321,15 +342,7 @@ MCP URL: `https://workiq.svc.cloud.microsoft/mcp`
 
 Registration docs: https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app
 
-1. Create a public OAuth client named OpenMausBot. Do not generate a client secret.
-2. Register this redirect URI, exactly: `http://127.0.0.1:33871/mcp-oauth/callback`
-3. Scopes from the server’s protected-resource metadata: `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`
-4. Put only the client id in `shared/plugin-catalog.json` under `teams` → `mcp.clientId`.
-5. Ship the catalog. Connect then opens the vendor’s authorize page.
-
-The live metadata lists token endpoint auth `client_secret_post`, `private_key_jwt`, `client_secret_basic`, `self_signed_tls_client_auth` and does not list `none`. OpenMausBot still sends a public client with PKCE and no secret. If the vendor rejects that, the sign-in stops. Do not add a secret to the catalog to force it through.
-
-Microsoft Entra is used at the **organizations** endpoint (`https://login.microsoftonline.com/organizations`), which covers work and school accounts without asking for a tenant id. The `common` endpoint is the same metadata shape; the protected-resource document names organizations, so that is the one sign-in uses. In the app registration, under Authentication, add a mobile/desktop public client and the redirect URI above. Under API permissions, add the Work IQ delegated scope from the list (the GUID in the scope is Microsoft’s resource app, not your client id). Enable “Allow public client flows”.
+Registered. Public client id `6bfa5a3d-30cd-4945-acff-4a925d2e9aa7` is on `mcp.clientId`. No client secret is stored. This card shows Connect. Redirect URI `http://127.0.0.1:33871/mcp-oauth/callback`. Scope `fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask`. Sign-in uses the **organizations** endpoint. See **Microsoft 365 is registered**.
 
 ### X
 

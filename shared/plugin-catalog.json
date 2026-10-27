@@ -1794,6 +1794,7 @@
       "scopes": [
         "fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask"
       ],
+      "clientId": "6bfa5a3d-30cd-4945-acff-4a925d2e9aa7",
       "verified": true,
       "registrationDocsUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app",
       "probedAt": "2026-10-27"
@@ -1860,6 +1861,7 @@
       "scopes": [
         "fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask"
       ],
+      "clientId": "6bfa5a3d-30cd-4945-acff-4a925d2e9aa7",
       "verified": true,
       "registrationDocsUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app",
       "probedAt": "2026-10-27"
@@ -1880,6 +1882,7 @@
       "scopes": [
         "fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask"
       ],
+      "clientId": "6bfa5a3d-30cd-4945-acff-4a925d2e9aa7",
       "verified": true,
       "registrationDocsUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app",
       "probedAt": "2026-10-27"
@@ -2453,6 +2456,7 @@
       "scopes": [
         "fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask"
       ],
+      "clientId": "6bfa5a3d-30cd-4945-acff-4a925d2e9aa7",
       "verified": true,
       "registrationDocsUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app",
       "probedAt": "2026-10-27"
@@ -2730,6 +2734,7 @@
       "scopes": [
         "fdcc1f02-fc51-4226-8753-f668596af7f7/WorkIQAgent.Ask"
       ],
+      "clientId": "6bfa5a3d-30cd-4945-acff-4a925d2e9aa7",
       "verified": true,
       "registrationDocsUrl": "https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app",
       "probedAt": "2026-10-27"
