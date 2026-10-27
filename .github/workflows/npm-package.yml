@@ -95,7 +95,8 @@ jobs:
   publish-npm:
     name: publish to npm
     needs: pack-and-prove
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Trusted publishing is configured for milind-soni/OpenMausBot only.
+    if: github.repository == 'milind-soni/OpenMausBot' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -123,7 +124,7 @@ jobs:
   update-github-release:
     name: update GitHub release
     needs: publish-npm
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.repository == 'milind-soni/OpenMausBot' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
