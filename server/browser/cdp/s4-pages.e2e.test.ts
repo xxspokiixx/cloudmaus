@@ -59,6 +59,15 @@ suite("S4 pages, tabs and page state on real Chrome", () => {
 
   const read = <T = unknown>(expression: string, on: CdpPage = page) => on.evaluate(expression) as Promise<T>;
 
+  // close() returns when Chrome accepts Target.closeTarget. pages() drops the
+  // tab only after Target.detachedFromTarget, and macos-latest can take longer
+  // than a fixed 200ms to deliver that. The suite shares one Chrome, so a tab
+  // still listed here also fails the next test.
+  async function waitUntilGone(target: CdpPage): Promise<void> {
+    const deadline = Date.now() + hostTimeout(10_000);
+    while (run.browser.pages().includes(target) && Date.now() < deadline) await page.waitFor({ ms: 50 });
+  }
+
   it("waits for the readiness asked for and reports the document's status", async () => {
     fx.route("/slow.png", { body: Buffer.from("not really a png"), type: "image/png", delayMs: 2_000 });
     const url = serve(`<p>early</p><img src="/slow.png">`);
@@ -160,7 +169,7 @@ suite("S4 pages, tabs and page state on real Chrome", () => {
     await page.click({ selector: "#o" });
     expect(run.browser.activePage).toBe(page);
     await popup.close();
-    await page.waitFor({ ms: 200 });
+    await waitUntilGone(popup);
     expect(run.browser.pages()).not.toContain(popup);
   });
 
@@ -194,7 +203,7 @@ suite("S4 pages, tabs and page state on real Chrome", () => {
     await second.click({ selector: "#b" });
     expect(await read(`document.getElementById("b").textContent`, second)).toBe("two");
     await second.close();
-    await page.waitFor({ ms: 200 });
+    await waitUntilGone(second);
     expect(run.browser.pages()).toEqual([page]);
     await expect(second.click({ selector: "#b" })).rejects.toMatchObject({ code: "closed" });
   });
