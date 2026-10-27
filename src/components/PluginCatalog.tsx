@@ -329,7 +329,7 @@ export function PluginCatalog({ search, onlyConnected, whopRefresh, whopConnecte
                         <button
                           key="add"
                           type="button"
-                          aria-label={label}
+                          aria-label={t(connected ? "plugins.skillmd.disconnect" : "plugins.skillmd.addNamed")}
                           disabled={pending}
                           onClick={() => void (connected ? disconnect(entry) : addOpen(entry))}
                           className="inline-flex h-7 min-w-[64px] shrink-0 items-center justify-center gap-2 rounded-full bg-control/80 px-3 text-[13px] font-medium leading-5 text-ink hover:bg-raised-hover disabled:opacity-40"

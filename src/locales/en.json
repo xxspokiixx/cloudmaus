@@ -40,6 +40,8 @@
   "plugins.manual.doneSkills": "Skills: {names}",
   "plugins.manual.skillmd": "SkillMD",
   "plugins.skillmd.add": "Add",
+  "plugins.skillmd.addNamed": "Add SkillMD",
+  "plugins.skillmd.disconnect": "Disconnect SkillMD",
   "plugins.skillmd.addHint": "No sign-in. It stays off until its tools load.",
   "plugins.skillmd.title": "Browse SkillMD",
   "plugins.skillmd.intro": "Search the open SkillMD registry. Reviewed skills are shown until you turn that filter off. Saving a skill keeps the SKILL.md text and leaves it off until you read it and turn it on.",
