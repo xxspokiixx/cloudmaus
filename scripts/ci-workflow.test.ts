@@ -192,7 +192,7 @@ describe("CI concurrency", () => {
   it("always starts the workflow and validates selection and docs before fanout", () => {
     expect(workflow.on.pull_request).toBeNull();
     expect(workflow.jobs.static.if).toBeUndefined();
-    expect(workflow.jobs.static.env).toEqual({ NODE_OPTIONS: "--max-old-space-size=8192" });
+    expect(workflow.env).toEqual({ NODE_OPTIONS: "--max-old-space-size=8192" });
     expect(workflow.jobs.static.steps[0].with["fetch-depth"]).toBe(0);
     expect(workflow.jobs.static.steps.find((step: { id?: string }) => step.id === "scope").run).toBe("node scripts/ci-scope.mjs");
     expect(workflow.jobs.static.outputs).toEqual({

@@ -16,6 +16,11 @@ on:
 permissions:
   contents: read
 
+# tsc -b on this tree exceeds Node's default ~2GB heap (CI OOM, exit 134).
+# The ceiling is not a reservation; jobs that do not need it stay small.
+env:
+  NODE_OPTIONS: --max-old-space-size=8192
+
 concurrency:
   # A new PR push supersedes that PR's older checks. Main keeps one run going
   # and one waiting: each merge replaces the waiting run, so a burst of
@@ -38,9 +43,6 @@ jobs:
     name: typecheck + lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # tsc -b on this tree exceeds Node's default ~2GB heap (CI OOM, exit 134).
-    env:
-      NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       contents: read
       # ci-scope reads whether the commit before a push got its own green run
