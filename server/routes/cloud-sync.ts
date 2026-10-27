@@ -94,5 +94,17 @@ export function createCloudSyncRoutes(options: {
 /** Which synced folders a session may reach (index.ts sets it on a Team Cloud: a bot's folder of someone else's chat never). */
 type FolderFilter = (auth: RequestAuth) => (folderId: string) => boolean;
 
-export const cloudSyncRoutes = createCloudSyncRoutes({ dataDir: DATA_DIR, cloudHome: () => cloudHomeConfigured(), power: cloudPowerNow });
+// The e2e sets this. A GitHub runner with ~10 GiB free of ~72 GiB is inside My Cloud's reserve
+// (the greater of 2 GiB and 15%), so the product correctly answers 507 and the desktop stays "waiting".
+// The fixture is the disk that check accounts against. Unset, the real volume is used.
+function syncDiskFixture(): ((path: string) => { totalBytes: number; freeBytes: number }) | undefined {
+  const match = /^(\d+),(\d+)$/.exec(process.env.OMB_SYNC_DISK_FIXTURE ?? "");
+  if (!match) return undefined;
+  const totalBytes = Number(match[1]);
+  const freeBytes = Number(match[2]);
+  if (!Number.isSafeInteger(totalBytes) || !Number.isSafeInteger(freeBytes) || totalBytes <= 0 || freeBytes < 0 || freeBytes > totalBytes) return undefined;
+  return () => ({ totalBytes, freeBytes });
+}
+
+export const cloudSyncRoutes = createCloudSyncRoutes({ dataDir: DATA_DIR, cloudHome: () => cloudHomeConfigured(), power: cloudPowerNow, statfs: syncDiskFixture() });
 export const noteSyncBotTurn = (botId: string, threadId: string) => cloudSyncRoutes.noteBotTurn(botId, threadId);
