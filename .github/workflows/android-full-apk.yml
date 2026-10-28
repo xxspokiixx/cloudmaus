@@ -83,6 +83,9 @@ jobs:
           path: |
             /home/runner/debianrootfs/rootfs.tar.gz
             /home/runner/debianrootfs/base-image-digest.txt
+            /home/runner/debianrootfs/packages.txt
+          # The script embeds the image digest and the snapshot timestamp, so
+          # this hash changes when either pin changes.
           key: debian-rootfs-${{ hashFiles('android/full/runtime/android-arm64/linux/build-debian-rootfs.py') }}
       - name: Build the Debian arm64 rootfs
         if: steps.rootfs-cache.outputs.cache-hit != 'true'
@@ -101,6 +104,10 @@ jobs:
           sha256sum "$HOME/debianrootfs/rootfs.tar.gz"
           echo "base image digest: $(cat "$HOME/debianrootfs/base-image-digest.txt")"
           cp "$HOME/debianrootfs/base-image-digest.txt" /tmp/base-image-digest.txt
+          if [[ -f "$HOME/debianrootfs/packages.txt" ]]; then
+            cp "$HOME/debianrootfs/packages.txt" /tmp/packages.txt
+            echo "packages: $(wc -l < "$HOME/debianrootfs/packages.txt")"
+          fi
           cp "$HOME/debianrootfs/rootfs.tar.gz" android/full/runtime/android-arm64/linux/rootfs.tar.gz
       - name: Stage Termux bins and omb-guest-chromium
         run: bash android/full/ci/stage-linux-bins.sh
@@ -124,6 +131,7 @@ jobs:
           path: |
             /tmp/rootfs-build.log
             /tmp/base-image-digest.txt
+            /tmp/packages.txt
 
   apk:
     name: apk

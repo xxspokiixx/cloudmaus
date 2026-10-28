@@ -95,6 +95,16 @@ nameservers were ever missing).
   â†’ the full rendered DOM of the real page (Chromium 156.0.8078.47). The
   dbus/udev/inotify errors in its stderr are benign container-init noise.
 
+## CI pin (2026-10-28)
+
+`build-debian-rootfs.py` no longer follows the moving `debian:trixie` tag or
+`deb.debian.org`. It pulls the arm64 manifest that the first CI run resolved,
+`sha256:39f862f398f8ea1a2ffee9bbe02c649be6779244bd6a834c4f71155172f801f2`, and
+installs packages from snapshot `20261028T022757Z` (the snapshot timestamp
+immediately before that run, about 04:00 UTC) for both `debian` and
+`debian-security`. The workflow cache key is the hash of that script, so
+changing either pin rebuilds the rootfs.
+
 ## Fallback kept but unstaged: proot `-q` + qemu-aarch64
 
 `qemu/` holds qemu-user-aarch64 1:11.1.2 (Termux build, PIE + bionic) and its

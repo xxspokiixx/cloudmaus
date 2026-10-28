@@ -7,6 +7,12 @@ import os
 import subprocess
 import urllib.request
 
+# Pinned from the first CI rootfs (2026-10-28). The trixie tag resolved to this
+# arm64 digest, and the nearest snapshot.debian.org timestamp before that run
+# is 20261028T022757Z. Both are the only sources this script pulls.
+BASE_DIGEST = "sha256:39f862f398f8ea1a2ffee9bbe02c649be6779244bd6a834c4f71155172f801f2"
+SNAPSHOT = "20261028T022757Z"
+
 WORK = os.path.expanduser("~/debianrootfs")
 TOKEN_URL = "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/debian:pull"
 REGISTRY = "https://registry-1.docker.io/v2/library/debian"
@@ -23,7 +29,8 @@ def fetch(url, accept=None, token=None):
     with urllib.request.urlopen(request) as response:
         return response.read()
 
-print("--- docker registry: debian:trixie arm64 ---")
+print("--- docker registry: debian:trixie arm64", BASE_DIGEST, "---")
+print("snapshot:", SNAPSHOT)
 token = json.loads(fetch(TOKEN_URL))["token"]
 ACCEPT = ", ".join([
     "application/vnd.oci.image.index.v1+json",
@@ -31,18 +38,10 @@ ACCEPT = ", ".join([
     "application/vnd.oci.image.manifest.v1+json",
     "application/vnd.docker.distribution.manifest.v2+json",
 ])
-index = json.loads(fetch(f"{REGISTRY}/manifests/trixie", ACCEPT, token))
-arch_digest = None
-for entry in index.get("manifests", []):
-    platform = entry.get("platform", {})
-    if platform.get("architecture") == "arm64" and platform.get("os") == "linux":
-        arch_digest = entry["digest"]
-if not arch_digest:
-    raise SystemExit("no arm64 manifest for debian:trixie")
-print("base image digest:", arch_digest)
+print("base image digest:", BASE_DIGEST)
 with open(os.path.join(WORK, "base-image-digest.txt"), "w", encoding="utf-8") as digest_file:
-    digest_file.write(arch_digest + "\n")
-manifest = json.loads(fetch(f"{REGISTRY}/manifests/{arch_digest}", ACCEPT, token))
+    digest_file.write(BASE_DIGEST + "\n")
+manifest = json.loads(fetch(f"{REGISTRY}/manifests/{BASE_DIGEST}", ACCEPT, token))
 if not manifest.get("layers"):
     raise SystemExit("no layers")
 
@@ -75,6 +74,24 @@ subprocess.run(["rm", "-rf", lists, cache], check=True)
 os.makedirs(lists)
 os.makedirs(cache)
 sources = os.path.join(rootfs, "etc/apt/sources.list.d/debian.sources")
+os.makedirs(os.path.dirname(sources), exist_ok=True)
+# The image's own sources follow the moving deb.debian.org mirror. Replace them
+# with the snapshot taken just before the first CI build.
+with open(sources, "w", encoding="utf-8") as source_file:
+    source_file.write(
+        "Types: deb\n"
+        f"URIs: https://snapshot.debian.org/archive/debian/{SNAPSHOT}\n"
+        "Suites: trixie trixie-updates\n"
+        "Components: main\n"
+        "Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp\n"
+        "\n"
+        "Types: deb\n"
+        f"URIs: https://snapshot.debian.org/archive/debian-security/{SNAPSHOT}\n"
+        "Suites: trixie-security\n"
+        "Components: main\n"
+        "Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp\n"
+    )
+print("apt snapshot:", SNAPSHOT)
 
 APT = ["apt-get",
        "-o", "APT::Architecture=arm64",
@@ -227,10 +244,13 @@ for url in urls:
     local = os.path.join(download_dir, url.rsplit("/", 1)[-1])
     if not os.path.exists(local):
         subprocess.run(["curl", "-sL", "-o", local, url], check=True)
+names = sorted(name for name in os.listdir(download_dir) if name.endswith(".deb"))
+with open(os.path.join(WORK, "packages.txt"), "w", encoding="utf-8") as package_list:
+    package_list.write("\n".join(names) + "\n")
+print(f"package list: {len(names)} debs written to packages.txt")
 print("--- unpacking closure into the rootfs ---")
-for name in sorted(os.listdir(download_dir)):
-    if name.endswith(".deb"):
-        subprocess.run(["dpkg-deb", "-x", os.path.join(download_dir, name), rootfs], check=True)
+for name in names:
+    subprocess.run(["dpkg-deb", "-x", os.path.join(download_dir, name), rootfs], check=True)
 
 print("--- chromium binary ---")
 subprocess.run(["ls", "-la", os.path.join(rootfs, "usr/lib/chromium/chromium")], check=True)
