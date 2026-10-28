@@ -13,8 +13,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 
-const ROOT = join(import.meta.dirname, "..");
-const OMB = join(ROOT, "android-test", "app", "src", "main", "assets", "omb");
+const OMB = join(import.meta.dirname, "app", "src", "main", "assets", "omb");
 const PORT = await freePortPair(18980, 18999);
 
 let failed = 0;
@@ -59,7 +58,7 @@ function nodePathWithoutSpaces(preferred) {
   if (!preferred.includes(" ")) return preferred;
   let short = "";
   try {
-    short = execFileSync("cmd", ["/d", "/s", "/q", "/c", "for", "%i", "in", `(\"${preferred}\")`, "do", "@echo", "%~si"], { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    short = execFileSync("cmd", ["/d", "/s", "/q", "/c", "for", "%i", "in", `("${preferred}")`, "do", "@echo", "%~si"], { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
   } catch {}
   if (short && !short.includes(" ") && existsSync(short)) return short;
   const copy = join(tmpdirRoot(), "node-copy.exe");
@@ -73,7 +72,7 @@ function nodePathWithoutSpaces(preferred) {
 
 function assertBootAssets() {
   for (const required of ["VERSION", join("server", "index.js"), join("ui", "index.html"), join("engine", "fake-claude-cli.ts")]) {
-    if (!existsSync(join(OMB, required))) fail(`missing staged asset omb/${required} — run android-test/prepare-android-assets.mjs`);
+    if (!existsSync(join(OMB, required))) fail(`missing staged asset omb/${required} — run android/full/prepare-android-assets.mjs`);
   }
   note(`assets omb VERSION ${readFileSync(join(OMB, "VERSION"), "utf8").trim()}`);
 }
@@ -333,13 +332,14 @@ async function request(method, path, { timeoutMs = 5000, body, headers = {} } = 
     const allHeaders = { ...headers };
     if (existingCookie) allHeaders.Cookie = existingCookie;
     if (body !== undefined) allHeaders["Content-Type"] = "application/json";
-    const res = await fetch(`${BASE}${path}`, {
+    const init = {
       method,
       headers: allHeaders,
-      body: body === undefined ? undefined : JSON.stringify(body),
       signal: AbortSignal.timeout(timeoutMs),
       redirect: "manual",
-    });
+    };
+    if (body !== undefined) init.body = JSON.stringify(body);
+    const res = await fetch(`${BASE}${path}`, init);
     const text = await res.text();
     const setCookie = res.headers.getSetCookie?.() ?? [];
     return { res: { status: res.status, body: text }, json: parseJsonOrNull(text), body: text, setCookie };

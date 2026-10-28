@@ -1,0 +1,231 @@
+# Builds the private SpokyBot debug APK (com.openmausbot.localtest) and uploads
+# it as a workflow artifact. It does not run on tags and it does not publish
+# a GitHub Release.
+name: Android full app
+
+on:
+  push:
+    branches: [cursor/android-full-ci-a593]
+    paths:
+      - android/full/**
+      - .github/workflows/android-full-apk.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-full-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-runtime:
+    name: node-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk and add swap
+        env:
+          FULL_APP_DROP_TOOLCACHE: "1"
+        run: bash android/full/ci/free-runner.sh
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/android-ndk-r30-linux.zip
+          key: android-ndk-r30-linux-zip
+      - uses: actions/cache@v4
+        id: libnode
+        with:
+          path: android/full/runtime/android-arm64/libnodeexec.so
+          key: libnodeexec-v24.20.0-ndk-r30-${{ hashFiles('android/full/runtime/android-arm64/build-evidence/*.diff', 'android/full/ci/build-libnodeexec.sh') }}
+      - name: Build libnodeexec.so
+        if: steps.libnode.outputs.cache-hit != 'true'
+        run: bash android/full/ci/build-libnodeexec.sh
+      - name: Report libnodeexec
+        run: |
+          set -euo pipefail
+          so=android/full/runtime/android-arm64/libnodeexec.so
+          test -f "$so"
+          file "$so"
+          file "$so" | grep -q 'ARM aarch64'
+          stat -c 'size=%s' "$so"
+          sha256sum "$so"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libnodeexec
+          path: android/full/runtime/android-arm64/libnodeexec.so
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: node-runtime-log
+          path: /tmp/libnodeexec-build.log
+          if-no-files-found: ignore
+
+  rootfs:
+    name: rootfs
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk
+        env:
+          SKIP_SWAP: "1"
+        run: bash android/full/ci/free-runner.sh
+      - uses: actions/cache@v4
+        with:
+          path: /home/runner/android-ndk-r30-linux.zip
+          key: android-ndk-r30-linux-zip
+      - uses: actions/cache@v4
+        id: rootfs-cache
+        with:
+          path: |
+            /home/runner/debianrootfs/rootfs.tar.gz
+            /home/runner/debianrootfs/base-image-digest.txt
+          key: debian-rootfs-${{ hashFiles('android/full/runtime/android-arm64/linux/build-debian-rootfs.py') }}
+      - name: Build the Debian arm64 rootfs
+        if: steps.rootfs-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y python3 ca-certificates curl
+          mkdir -p "$HOME/debianrootfs"
+          python3 android/full/runtime/android-arm64/linux/build-debian-rootfs.py | tee /tmp/rootfs-build.log
+          test -f "$HOME/debianrootfs/rootfs.tar.gz"
+          test -f "$HOME/debianrootfs/base-image-digest.txt"
+      - name: Record rootfs size and base digest
+        run: |
+          set -euxo pipefail
+          stat -c 'rootfs size=%s' "$HOME/debianrootfs/rootfs.tar.gz"
+          sha256sum "$HOME/debianrootfs/rootfs.tar.gz"
+          echo "base image digest: $(cat "$HOME/debianrootfs/base-image-digest.txt")"
+          cp "$HOME/debianrootfs/base-image-digest.txt" /tmp/base-image-digest.txt
+          cp "$HOME/debianrootfs/rootfs.tar.gz" android/full/runtime/android-arm64/linux/rootfs.tar.gz
+      - name: Stage Termux bins and omb-guest-chromium
+        run: bash android/full/ci/stage-linux-bins.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-payload
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            android/full/runtime/android-arm64/linux/rootfs.tar.gz
+            android/full/runtime/android-arm64/linux/proot
+            android/full/runtime/android-arm64/linux/loader
+            android/full/runtime/android-arm64/linux/libtalloc.so.2
+            android/full/runtime/android-arm64/linux/libandroid-shmem.so
+            android/full/runtime/android-arm64/linux/omb-guest-chromium
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rootfs-build-log
+          if-no-files-found: ignore
+          path: |
+            /tmp/rootfs-build.log
+            /tmp/base-image-digest.txt
+
+  apk:
+    name: apk
+    needs: [node-runtime, rootfs]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk
+        env:
+          SKIP_SWAP: "1"
+        run: bash android/full/ci/free-runner.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Enable pnpm
+        id: pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.33.0 --activate
+          echo "store=$(pnpm store path)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm.outputs.store }}
+          key: pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install, bundle the server, and build the UI
+        run: |
+          set -euxo pipefail
+          corepack pnpm install --frozen-lockfile
+          corepack pnpm run build:server
+          corepack pnpm exec vite build
+      - uses: actions/download-artifact@v4
+        with:
+          name: libnodeexec
+          path: android/full/runtime/android-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-payload
+          path: android/full/runtime/android-arm64/linux
+      - name: Stage assets and smoke the bundle
+        run: |
+          set -euxo pipefail
+          node android/full/prepare-android-assets.mjs
+          node android/full/smoke-bundle.mjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.1.0
+      - name: Install the Android SDK
+        run: |
+          set -euxo pipefail
+          sdk="${RUNNER_TOOL_CACHE}/android-sdk"
+          mkdir -p "$sdk/cmdline-tools"
+          if [[ ! -x "$sdk/cmdline-tools/latest/bin/sdkmanager" ]]; then
+            tmp=$(mktemp -d)
+            curl -fL --retry 5 --retry-all-errors -o "$tmp/cmdtools.zip" \
+              https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -q "$tmp/cmdtools.zip" -d "$tmp"
+            mkdir -p "$sdk/cmdline-tools/latest"
+            mv "$tmp/cmdline-tools/"* "$sdk/cmdline-tools/latest/"
+          fi
+          export ANDROID_HOME="$sdk"
+          export ANDROID_SDK_ROOT="$sdk"
+          export PATH="$sdk/cmdline-tools/latest/bin:$PATH"
+          mkdir -p "$sdk/licenses"
+          printf '%s\n' "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$sdk/licenses/android-sdk-license"
+          sdkmanager --sdk_root="$sdk" "platforms;android-35" "build-tools;35.0.0"
+          echo "ANDROID_HOME=$sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$sdk" >> "$GITHUB_ENV"
+      - name: Regenerate the Gradle wrapper and assemble the debug APK
+        working-directory: android/full
+        run: |
+          set -euxo pipefail
+          gradle wrapper --gradle-version 9.1.0
+          chmod +x gradlew
+          sed -i 's/^-Xmx2048m/-Xmx4g/; s/org.gradle.jvmargs=-Xmx2048m/org.gradle.jvmargs=-Xmx4g/' gradle.properties
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: Check the APK and write its sha256
+        working-directory: android/full
+        run: |
+          set -euxo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          test -f "$apk"
+          size=$(stat -c%s "$apk")
+          echo "apk size=$size"
+          test "$size" -ge 400000000
+          unzip -l "$apk" > /tmp/apk-list.txt
+          grep -F 'assets/omb/linux/rootfs.blob' /tmp/apk-list.txt
+          grep -F 'lib/arm64-v8a/libnodeexec.so' /tmp/apk-list.txt
+          grep -F 'assets/omb/server/index.js' /tmp/apk-list.txt
+          grep -F 'assets/omb/ui/' /tmp/apk-list.txt
+          sha256sum "$apk" | tee app/build/outputs/apk/debug/app-debug.apk.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spokybot-debug-apk
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            android/full/app/build/outputs/apk/debug/app-debug.apk
+            android/full/app/build/outputs/apk/debug/app-debug.apk.sha256

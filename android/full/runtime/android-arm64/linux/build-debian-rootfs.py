@@ -39,6 +39,9 @@ for entry in index.get("manifests", []):
         arch_digest = entry["digest"]
 if not arch_digest:
     raise SystemExit("no arm64 manifest for debian:trixie")
+print("base image digest:", arch_digest)
+with open(os.path.join(WORK, "base-image-digest.txt"), "w", encoding="utf-8") as digest_file:
+    digest_file.write(arch_digest + "\n")
 manifest = json.loads(fetch(f"{REGISTRY}/manifests/{arch_digest}", ACCEPT, token))
 if not manifest.get("layers"):
     raise SystemExit("no layers")

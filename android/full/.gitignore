@@ -3,6 +3,7 @@ build/
 local.properties
 app/src/main/assets/
 app/src/main/jniLibs/
+.ci-out/
 runtime/android-arm64/*.so
 runtime/android-arm64/node-nonpackaged
 runtime/android-arm64/linux/*
