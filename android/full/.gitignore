@@ -1,0 +1,10 @@
+.gradle/
+build/
+local.properties
+app/src/main/assets/
+app/src/main/jniLibs/
+runtime/android-arm64/*.so
+runtime/android-arm64/node-nonpackaged
+runtime/android-arm64/linux/*
+!runtime/android-arm64/linux/BUILD-NOTES.md
+!runtime/android-arm64/linux/omb-guest-chromium.c
