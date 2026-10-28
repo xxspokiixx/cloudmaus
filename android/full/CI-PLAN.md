@@ -48,3 +48,15 @@ On-device boot/pairing/WebView, proot exec (needs targetSdk 28 domain), Chromium
 7. gradlew exec bit + missing wrapper jar on branch.
 8. prepare script paths changed from android-test/ to android/full/ (untested on device layout; staged asset layout unchanged).
 9. No signing config: debug keystore auto-generated per runner => APK signature changes each CI run (reinstall needs uninstall). Use a stable debug keystore from secrets.
+
+## Termux pinned downloads (verified 2026-10-27, HTTP 200 from box; extracted file hashes compared)
+| file | deb URL | deb sha256 | match committed hash? |
+|---|---|---|---|
+| libandroid-shmem.so | https://packages.termux.dev/apt/termux-main/pool/main/liba/libandroid-shmem/libandroid-shmem_0.7_aarch64.deb | 0da3a24d558b93c92bcf8d611e0826a99ff96e396b148e6cdf33b47c47c57ff6 | YES (84475798…) usr/lib/libandroid-shmem.so |
+| libtalloc.so.2 | https://packages.termux.dev/apt/termux-main/pool/main/libt/libtalloc/libtalloc_2.5.0_aarch64.deb | 556591f43bb773ad8777e1a29522640866a55f95dab71914418b94a8c58ad5a7 | YES (742b438c…) usr/lib/libtalloc.so.2.5.0 |
+| loader | https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.101_aarch64.deb | a28355e9be257e1f87f4e9294b3118470d4fd7a5442fed8b278f4443c83407d7 | YES (1da54355…) usr/libexec/proot/loader |
+| proot | same deb | same | NO: deb has 259,784 B sha256 bc3e5416…fa09; committed is 258,576 B 0b9b0448… (older/other build; Termux pool keeps only current). Either accept current proot (needs device test) or host the original. |
+Paths inside debs are under data/data/com.termux/files/usr/.
+
+## Rootfs builder (recovered)
+build-debian-rootfs.py (10,836 B) from %TEMP%\opencode, now on branch. Facts: pulls floating docker.io/library/debian:trixie arm64 (docstring/notes wrongly say bookworm; base-files 13.8+deb13u7), no digest pin; anonymous registry token fetched at runtime (no secret); apt with --allow-unauthenticated/AllowInsecureRepositories; adds npm opencode-linux-arm64 1.19.4. Runs unprivileged on x86 Linux (needs apt-get, dpkg-deb, curl). Pin: resolve trixie digest + snapshot.debian.org date. Inventory in debian-packages.txt (base versions only; added-deb versions unrecorded).
