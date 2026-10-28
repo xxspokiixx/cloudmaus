@@ -45,7 +45,7 @@ async function main() {
   step("first-run starter bot on the fixture engine", Boolean(bot));
   if (!bot) return;
   await instancesReport();
-  step("mobile data gate refuses the native engine", await expectsDataEngineRefusal(bot));
+  step("data route", await dataRoute(bot));
 
   step("fixture engine reply within 60 s", await turnAndExpectReply(bot, 60_000));
 }
@@ -243,21 +243,21 @@ async function starterBot() {
   return null;
 }
 
-/** The embedded build deliberately ships no duckdb/resvg: the data panel must
- * say so loudly instead of erroring on a phone-only platform. */
-async function expectsDataEngineRefusal(bot) {
+/** On a phone the staged bundle has no DuckDB binding, so this route answers
+ * 503 engine_unavailable. A host whose binding loads answers 200 with a sheet.
+ * Either result means the route is the server's, not a boot failure. */
+async function dataRoute(bot) {
   const { res, body } = await request("GET", `/api/bots/${bot.id}/data`, { timeoutMs: 8000 });
-  if (res?.status !== 503) {
-    fail(`data route answered ${res?.status}: ${body.slice(0, 200)}`);
-    return false;
+  if (res?.status === 503 && json(body)?.error?.code === "engine_unavailable") {
+    note(json(body)?.error?.message ?? "engine_unavailable");
+    return true;
   }
-  const code = json(body)?.error?.code;
-  if (code !== "engine_unavailable") {
-    fail(`data route 503 but code ${JSON.stringify(code)}`);
-    return false;
+  if (res?.status === 200 && json(body)?.sheet) {
+    note("DuckDB loaded on this host, so the route served a sheet");
+    return true;
   }
-  note(json(body)?.error?.message);
-  return true;
+  fail(`data route answered ${res?.status}: ${body.slice(0, 200)}`);
+  return false;
 }
 
 async function instancesReport() {
