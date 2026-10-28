@@ -2,10 +2,14 @@
 """Builds a Debian bookworm arm64 rootfs with chromium, without root:
 pulls the official debian:bookworm arm64 layer from the Docker registry,
 then apt-resolves chromium's dependency closure and unpacks every .deb."""
+import hashlib
 import json
 import os
 import subprocess
+import tempfile
 import urllib.request
+import lzma
+import gzip
 
 # Pinned from the first CI rootfs (2026-10-28). The trixie tag resolved to this
 # arm64 digest, and the nearest snapshot.debian.org timestamp before that run
@@ -19,6 +23,99 @@ REGISTRY = "https://registry-1.docker.io/v2/library/debian"
 
 os.makedirs(WORK, exist_ok=True)
 os.chdir(WORK)
+
+def archive_keyring():
+    for candidate in (
+        "/usr/share/keyrings/debian-archive-keyring.pgp",
+        "/usr/share/keyrings/debian-archive-keyring.gpg",
+    ):
+        if os.path.isfile(candidate):
+            return candidate
+    raise SystemExit("debian-archive-keyring is not installed")
+
+
+def verify_release(uri, suite):
+    """gpgv the snapshot Release file, then return its SHA256 name map."""
+    base = f"{uri}/dists/{suite}"
+    release = fetch(f"{base}/Release")
+    signature = fetch(f"{base}/Release.gpg")
+    keyring = archive_keyring()
+    with tempfile.TemporaryDirectory() as tmp:
+        release_path = os.path.join(tmp, "Release")
+        signature_path = os.path.join(tmp, "Release.gpg")
+        with open(release_path, "wb") as handle:
+            handle.write(release)
+        with open(signature_path, "wb") as handle:
+            handle.write(signature)
+        checked = subprocess.run(
+            ["gpgv", "--keyring", keyring, signature_path, release_path],
+            capture_output=True, text=True,
+        )
+        if "BAD signature" in checked.stderr or "Good signature" not in checked.stderr:
+            print(checked.stderr)
+            raise SystemExit(f"Release signature failed for {suite}")
+        # Debian signs Release with several archive keys. gpgv exits 2 when this
+        # keyring can check one of them and does not contain the others.
+        if checked.returncode not in (0, 2):
+            print(checked.stderr)
+            raise SystemExit(f"Release signature failed for {suite}")
+        print(checked.stderr.strip())
+    print(f"Release signature ok: {suite}")
+    entries = {}
+    in_sha = False
+    for line in release.decode().splitlines():
+        if line.startswith("SHA256:"):
+            in_sha = True
+            continue
+        if not in_sha:
+            continue
+        if not line.startswith(" "):
+            in_sha = False
+            continue
+        digest, _size, name = line.split()
+        entries[name] = digest
+    return entries
+
+
+def packages_from_release(uri, suite, entries):
+    """Verify Packages indexes against Release and return Filename -> SHA256."""
+    records = {}
+    wanted = tuple(
+        suffix for suffix in (
+            "main/binary-arm64/Packages.xz",
+            "main/binary-all/Packages.xz",
+            "main/binary-arm64/Packages.gz",
+            "main/binary-all/Packages.gz",
+        )
+    )
+    for name in wanted:
+        digest = entries.get(name)
+        if digest is None:
+            continue
+        blob = fetch(f"{uri}/dists/{suite}/{name}")
+        got = hashlib.sha256(blob).hexdigest()
+        if got != digest:
+            raise SystemExit(f"Packages hash mismatch for {suite}/{name}")
+        if name.endswith(".xz"):
+            text = lzma.decompress(blob).decode()
+        else:
+            text = gzip.decompress(blob).decode()
+        for block in text.split("\n\n"):
+            fields = {}
+            for line in block.splitlines():
+                if not line or line.startswith(" ") or ":" not in line:
+                    continue
+                key, value = line.split(":", 1)
+                fields[key] = value.strip()
+            filename = fields.get("Filename")
+            sha = fields.get("SHA256")
+            if filename and sha:
+                records[filename] = sha
+    if not records:
+        raise SystemExit(f"no Packages index verified for {suite}")
+    print(f"Packages verified: {suite} ({len(records)} files)")
+    return records
+
 
 def fetch(url, accept=None, token=None):
     request = urllib.request.Request(url)
@@ -83,13 +180,13 @@ with open(sources, "w", encoding="utf-8") as source_file:
         f"URIs: https://snapshot.debian.org/archive/debian/{SNAPSHOT}\n"
         "Suites: trixie trixie-updates\n"
         "Components: main\n"
-        "Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp\n"
+        f"Signed-By: {archive_keyring()}\n"
         "\n"
         "Types: deb\n"
         f"URIs: https://snapshot.debian.org/archive/debian-security/{SNAPSHOT}\n"
         "Suites: trixie-security\n"
         "Components: main\n"
-        "Signed-By: /usr/share/keyrings/debian-archive-keyring.pgp\n"
+        f"Signed-By: {archive_keyring()}\n"
     )
 print("apt snapshot:", SNAPSHOT)
 
@@ -105,8 +202,6 @@ APT = ["apt-get",
        "-o", "Dir::Etc::sourceparts=-",
        "-o", f"Dir::Etc::trustedparts={os.path.join(rootfs, 'etc/apt/trusted.gpg.d')}",
        "-o", "APT::Install-Recommends=false",
-       "--allow-unauthenticated",
-       "-o", "Acquire::AllowInsecureRepositories=true",
        "-y"]
 
 print("--- apt update (foreign root) ---")
@@ -237,13 +332,29 @@ print(f"closure: {len(urls)} debs")
 if not urls:
     raise SystemExit("apt resolved nothing")
 
+index = {}
+for uri, suite in (
+    (f"https://snapshot.debian.org/archive/debian/{SNAPSHOT}", "trixie"),
+    (f"https://snapshot.debian.org/archive/debian/{SNAPSHOT}", "trixie-updates"),
+    (f"https://snapshot.debian.org/archive/debian-security/{SNAPSHOT}", "trixie-security"),
+):
+    index.update(packages_from_release(uri, suite, verify_release(uri, suite)))
+
 download_dir = os.path.join(WORK, "debs")
 subprocess.run(["rm", "-rf", download_dir], check=True)
 os.makedirs(download_dir)
 for url in urls:
+    pool = url[url.find("/pool/") + 1:]
+    expected = index.get(pool)
+    if not expected:
+        raise SystemExit(f"no signed Packages entry for {url}")
     local = os.path.join(download_dir, url.rsplit("/", 1)[-1])
     if not os.path.exists(local):
-        subprocess.run(["curl", "-sL", "-o", local, url], check=True)
+        subprocess.run(["curl", "-fsSL", "-o", local, url], check=True)
+    got = hashlib.sha256(open(local, "rb").read()).hexdigest()
+    if got != expected:
+        raise SystemExit(f"deb sha256 mismatch for {pool}: got {got}, index {expected}")
+print(f"verified sha256 for {len(urls)} debs")
 names = sorted(name for name in os.listdir(download_dir) if name.endswith(".deb"))
 with open(os.path.join(WORK, "packages.txt"), "w", encoding="utf-8") as package_list:
     package_list.write("\n".join(names) + "\n")

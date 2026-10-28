@@ -92,7 +92,7 @@ jobs:
         run: |
           set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y python3 ca-certificates curl
+          sudo apt-get install -y python3 ca-certificates curl debian-archive-keyring gpgv
           mkdir -p "$HOME/debianrootfs"
           python3 android/full/runtime/android-arm64/linux/build-debian-rootfs.py | tee /tmp/rootfs-build.log
           test -f "$HOME/debianrootfs/rootfs.tar.gz"

@@ -103,7 +103,9 @@ nameservers were ever missing).
 installs packages from snapshot `20261028T022757Z` (the snapshot timestamp
 immediately before that run, about 04:00 UTC) for both `debian` and
 `debian-security`. The workflow cache key is the hash of that script, so
-changing either pin rebuilds the rootfs.
+changing either pin rebuilds the rootfs. Each added `.deb` is checked
+against the signed `Release`/`Packages` indexes (`gpgv` plus the
+`debian-archive-keyring` keyring, then the package SHA256).
 
 ## Fallback kept but unstaged: proot `-q` + qemu-aarch64
 
