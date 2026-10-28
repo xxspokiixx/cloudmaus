@@ -1,0 +1,13 @@
+.gradle/
+build/
+local.properties
+app/src/main/assets/
+app/src/main/jniLibs/
+.ci-out/
+runtime/android-arm64/*.so
+runtime/android-arm64/node-nonpackaged
+runtime/android-arm64/linux/*
+!runtime/android-arm64/linux/BUILD-NOTES.md
+!runtime/android-arm64/linux/omb-guest-chromium.c
+!runtime/android-arm64/linux/proot.b64
+!runtime/android-arm64/linux/proot.sha256
