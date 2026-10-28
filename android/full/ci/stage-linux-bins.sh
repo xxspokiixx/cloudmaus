@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Fetches the current Termux aarch64 debs, checks their sha256, and compiles
-# omb-guest-chromium with NDK r30. proot comes from that current deb; its bytes
-# differ from the binary that was tested on the phone.
+# Fetches the pinned Termux aarch64 debs for the loader, libtalloc, and
+# libandroid-shmem, checks their sha256, and compiles omb-guest-chromium.
+# proot is the phone-tested binary committed as proot.b64, not the current
+# Termux deb.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 DEST="$ROOT/android/full/runtime/android-arm64/linux"
@@ -49,7 +50,6 @@ extract_one() {
 extract_one "$WORK/libandroid-shmem.deb" libandroid-shmem.so "$DEST/libandroid-shmem.so"
 extract_one "$WORK/libtalloc.deb" 'libtalloc.so.2*' "$DEST/libtalloc.so.2"
 extract_one "$WORK/proot.deb" loader "$DEST/loader"
-extract_one "$WORK/proot.deb" proot "$DEST/proot"
 
 expect_sha() {
   local file="$1" sha="$2"
@@ -58,9 +58,15 @@ expect_sha() {
 expect_sha "$DEST/libandroid-shmem.so" 84475798e07c8174dbbfaec70a827fdb02f19ffa69a589380c13e7507fd0e731
 expect_sha "$DEST/libtalloc.so.2" 742b438c4d09e276985a61d44164c9de207b6d8cc268f3018cb3001961bcb309
 expect_sha "$DEST/loader" 1da54355333cca3fb6ee10e3b82a24df24fb230c99241ce83809bf9e240609b5
-echo "proot from the current Termux deb (not the on-device-tested build):"
-sha256sum "$DEST/proot"
-stat -c 'proot size=%s' "$DEST/proot"
+
+base64 -d "$DEST/proot.b64" > "$DEST/proot"
+chmod 755 "$DEST/proot"
+if ! (cd "$DEST" && sha256sum -c proot.sha256); then
+  echo "phone-tested proot sha256 mismatch" >&2
+  exit 1
+fi
+test "$(stat -c%s "$DEST/proot")" -eq 258576
+echo "proot is the phone-tested binary (258576 bytes)"
 
 CLANG="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android26-clang"
 "$CLANG" -fPIE -pie -O2 -o "$DEST/omb-guest-chromium" \

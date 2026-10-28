@@ -9,3 +9,5 @@ runtime/android-arm64/node-nonpackaged
 runtime/android-arm64/linux/*
 !runtime/android-arm64/linux/BUILD-NOTES.md
 !runtime/android-arm64/linux/omb-guest-chromium.c
+!runtime/android-arm64/linux/proot.b64
+!runtime/android-arm64/linux/proot.sha256
