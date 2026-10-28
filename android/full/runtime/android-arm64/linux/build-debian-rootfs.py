@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import tempfile
+import urllib.parse
 import urllib.request
 import lzma
 import gzip
@@ -344,7 +345,7 @@ download_dir = os.path.join(WORK, "debs")
 subprocess.run(["rm", "-rf", download_dir], check=True)
 os.makedirs(download_dir)
 for url in urls:
-    pool = url[url.find("/pool/") + 1:]
+    pool = urllib.parse.unquote(url[url.find("/pool/") + 1:])
     expected = index.get(pool)
     if not expected:
         raise SystemExit(f"no signed Packages entry for {url}")
